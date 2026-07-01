@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block content %}
+<div id="quiz-workspace" class="p-5 space-y-6">
+    <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex justify-between items-center">
+        <div>
+            <h3 class="text-md font-bold text-slate-800">{{ session.topic }}</h3>
+            <span id="hint-status-label" class="text-xs text-slate-400 font-semibold uppercase"></span>
+        </div>
+        <div class="text-right">
+            <div id="clock-display" class="text-xl font-mono font-bold text-indigo-600">00:00</div>
+        </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+        <div id="question-header" class="text-sm font-bold text-indigo-600 mb-2"></div>
+        <p id="question-body-text" class="text-base text-slate-800 font-medium mb-6"></p>
+        
+        <div id="options-box" class="space-y-2.5"></div>
+        
+        <div id="feedback-explanation-panel" class="mt-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl hidden">
+            <h5 class="text-xs font-bold text-indigo-900 uppercase mb-1">Explanation After Attempt</h5>
+            <p id="explanation-text-string" class="text-sm text-slate-700 leading-relaxed"></p>
+        </div>
+    </div>
+
+    <div class="flex justify-between items-center">
+        <button id="prevBtn" onclick="moveSlide(-1)" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 disabled:opacity-50">Previous</button>
+        <div class="flex gap-2">
+            <button id="clearBtn" onclick="clearCurrentChoice()" class="px-4 py-2 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium hover:bg-slate-50">Clear Answer</button>
+            <button id="hintTriggerBtn" onclick="requestHintPayload()" class="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 hidden">Hint</button>
+        </div>
+        <button id="nextBtn" onclick="moveSlide(1)" class="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-black">Next</button>
+    </div>
+</div>
+
+<div id="analytics-report-card" class="hidden space-y-6 bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
+    <h3 class="text-2xl font-bold text-slate-900">Quiz Summary Report</h3>
+    <p class="text-lg font-semibold text-slate-700">Total Score: <span id="score-data-val" class="font-black text-indigo-600"></span></p>
+    
+    <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+        <h4 class="text-xs font-bold text-emerald-900 uppercase mb-1">Improvement Suggestions</h4>
+        <p id="recommendation-box-string" class="text-sm text-slate-700 leading-relaxed"></p>
+    </div>
+    
+    <button onclick="revealExplanationsWorkflow()" class="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-lg hover:bg-indigo-700 transition text-sm">Review Answers & Explanations</button>
+</div>
+
+<script>
+let questionDeck = [];
+let cursor = 0;
+let savedAnswers = {};
+let secondsLeft = 0;
+let clockLoop;
+let reviewMode = false;
+let globalExplanations = {};
+
+async function startEngine() {
+    const res = await fetch('/api/quiz/{{ session.id }}/questions');
+    const data = await res.json();
+    questionDeck = data.questions;
+    
+    if (data.is_completed) {
+        reviewMode = true;
+        savedAnswers = data.saved_answers;
+        globalExplanations = data.explanations;
+        
+        document.getElementById('quiz-workspace').classList.add('hidden');
+        document.getElementById('analytics-report-card').classList.remove('hidden');
+        document.getElementById('score-data-val').innerText = `${data.score} / ${data.total}`;
+        document.getElementById('recommendation-box-string').innerText = data.recommendation;
+    } else {
+        secondsLeft = data.duration * 60;
+        configureHintsIndicator(data.difficulty, data.hints_remaining);
+        beginClock();
+        showQuestion();
+    }
+}
+
+function configureHintsIndicator(mode, total) {
+    const lbl = document.getElementById('hint-status-label');
+    const btn = document.getElementById('hintTriggerBtn');
+    if(mode === 'easy') { lbl.innerText = "Hints: Unlimited"; btn.classList.remove('hidden'); }
+    else if(mode === 'medium') { lbl.innerText = `Hints Left: ${total}`; btn.classList.remove('hidden'); }
+    else { lbl.innerText = `Hints Disabled (${mode})`; btn.style.display = 'none'; }
+}
+
+function showQuestion() {
+    if(!questionDeck.length) return;
+    const item = questionDeck[cursor];
+    
+    document.getElementById('question-header').innerText = `Question ${cursor + 1} of ${questionDeck.length}`;
+    document.getElementById('question-body-text').innerText = item.question;
+    
+    let container = document.getElementById('options-box');
+    container.innerHTML = '';
+    
+    ['1', '2', '3', '4'].forEach(indexId => {
+        let isUserChoice = savedAnswers[item.id] == indexId;
+        let selectedState = isUserChoice ? 'checked' : '';
+        let disabledState = reviewMode ? 'disabled' : '';
+        let row = document.createElement('label');
+        let classString = "flex items-center justify-between p-3 border rounded-lg cursor-pointer text-sm transition font-medium relative ";
+        let badgeHtml = "";
+        
+        if (reviewMode) {
+            let correctOptionIndex = globalExplanations[item.id]?.correct;
+            let isCorrectChoice = indexId == correctOptionIndex;
+            
+            if (isCorrectChoice) {
+                classString += "border-emerald-500 bg-emerald-50/60 text-emerald-900";
+                badgeHtml = '<span class="bg-emerald-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">Correct</span>';
+            } else if (isUserChoice && !isCorrectChoice) {
+                classString += "border-rose-500 bg-rose-50/60 text-rose-900";
+                badgeHtml = '<span class="bg-rose-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">Wrong</span>';
+            } else {
+                classString += "border-slate-200 opacity-60";
+            }
+        } else {
+            // Live active testing states
+            classString += isUserChoice ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-200 hover:bg-slate-50';
+        }
+        
+        row.className = classString;
+        row.innerHTML = `
+            <div class="flex items-center gap-3">
+                <input type="radio" name="opts-${item.id}" value="${indexId}" ${selectedState} ${disabledState} onchange="logSelection(${item.id}, ${indexId})" class="h-4 w-4 text-indigo-600">
+                <span>${indexId}. ${item[indexId]}</span>
+            </div>
+            ${badgeHtml}
+        `;
+        container.appendChild(row);
+    });
+
+    document.getElementById('prevBtn').disabled = cursor === 0;
+    document.getElementById('nextBtn').innerText = cursor === questionDeck.length - 1 ? (reviewMode ? "Exit" : "Submit") : "Next";
+    
+    const expPanel = document.getElementById('feedback-explanation-panel');
+    if(reviewMode && globalExplanations[item.id]) {
+        expPanel.classList.remove('hidden');
+        document.getElementById('explanation-text-string').innerText = globalExplanations[item.id].explanation;
+    } else {
+        expPanel.classList.add('hidden');
+    }
+}
+
+function logSelection(qId, idx) { 
+    if(reviewMode) return;
+    savedAnswers[qId] = idx; 
+    showQuestion();
+}
+
+function clearCurrentChoice() {
+    if(reviewMode) return;
+    const item = questionDeck[cursor];
+    delete savedAnswers[item.id];
+    showQuestion();
+}
+
+function moveSlide(offset) {
+    if(offset === 1 && cursor === questionDeck.length - 1) { 
+        if(reviewMode) { window.location.href = '/home'; } else { completeQuizSession(); }
+        return; 
+    }
+    cursor += offset;
+    showQuestion();
+}
+
+async function requestHintPayload() {
+    const item = questionDeck[cursor];
+    const res = await fetch(`/api/quiz/{{ session.id }}/hint/${item.id}`, { method: 'POST' });
+    const data = await res.json();
+    if(data.hint) { alert("Hint Details: " + data.hint); if(data.hints_remaining!==undefined) configureHintsIndicator('medium', data.hints_remaining); }
+    else { alert(data.error); }
+}
+
+function beginClock() {
+    const view = document.getElementById('clock-display');
+    clockLoop = setInterval(() => {
+        if(secondsLeft <= 0) { clearInterval(clockLoop); completeQuizSession(); return; }
+        secondsLeft--;
+        let m = Math.floor(secondsLeft / 60).toString().padStart(2, '0');
+        let s = (secondsLeft % 60).toString().padStart(2, '0');
+        view.innerText = `${m}:${s}`;
+    }, 1000);
+}
+
+async function completeQuizSession() {
+    clearInterval(clockLoop);
+    const res = await fetch('/api/quiz/{{ session.id }}/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: savedAnswers })
+    });
+    const data = await res.json();
+    globalExplanations = data.explanations;
+    
+    document.getElementById('quiz-workspace').classList.add('hidden');
+    document.getElementById('analytics-report-card').classList.remove('hidden');
+    document.getElementById('score-data-val').innerText = `${data.score} / ${data.total}`;
+    document.getElementById('recommendation-box-string').innerText = data.recommendation;
+}
+
+function revealExplanationsWorkflow() {
+    document.getElementById('analytics-report-card').classList.add('hidden');
+    document.getElementById('quiz-workspace').classList.remove('hidden');
+    reviewMode = true;
+    cursor = 0;
+    showQuestion();
+}
+
+window.onload = startEngine;
+</script>
+{% endblock %}

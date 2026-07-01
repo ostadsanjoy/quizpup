@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="bg-[#D7BEA8] px-6 py-3 rounded-b-[2.5rem] flex items-center justify-between shadow-sm border-b border-[#B49286]">
+    <div class="w-24 h-24 flex items-center justify-center transition duration-300 hover:scale-105">
+        <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}" class="max-h-full max-w-full object-contain drop-shadow-sm" alt="Mascot">
+    </div>
+    
+    <div class="text-right flex flex-col justify-center select-none">
+        <h2 class="text-2xl font-serif font-bold text-[#744253] leading-tight">Hello,</h2>
+        <p class="text-lg font-medium text-[#744253] opacity-90 -mt-0.5">{{ current_user.username }}</p>
+    </div>
+</div>
+
+<div class="p-5 space-y-6">
+    {% if view == 'home' %}
+    <div class="bg-[#C78283] p-4 rounded-3xl flex justify-between items-center shadow-sm">
+        <h3 class="text-2xl font-serif font-bold text-white pl-2">Past Quizzes</h3>
+        <a href="/new-quiz" class="bg-[#744253] text-white text-xs font-semibold px-4 py-2.5 rounded-full hover:bg-black transition shadow-md">
+            Create New Quiz
+        </a>
+    </div>
+
+    <div class="space-y-4">
+        {% for q in past_quizzes %}
+        <a href="/quiz/{{ q.id }}" class="block bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition shadow-sm group">
+            <div class="space-y-1">
+                <h4 class="font-bold text-[#744253] text-lg group-hover:underline">{{ q.topic }}</h4>
+                <div class="flex gap-4 text-xs font-medium text-[#744253] opacity-80">
+                    <span>Questions: {{ q.total_questions }}</span>
+                    <span>Time: {{ q.duration_minutes }}m</span>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
+                <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions }}</span>
+            </div>
+        </a>
+        {% else %}
+        <div class="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-3xl">
+            <p class="text-sm text-slate-400 font-medium">No Quizzes attempted yet.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% elif view == 'new_quiz' %}
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
+        <div class="bg-[#C78283] p-3 rounded-2xl">
+            <h3 class="text-lg font-bold text-white text-center">Configure Quiz Parameters</h3>
+        </div>
+        
+        <form id="quizGenForm" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Topic Quiz</label>
+                <input type="text" name="topic" placeholder="Type target topic name..." class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+            </div>
+            
+            <div class="border-2 border-dashed border-[#B49286] bg-[#F3D9DC]/30 rounded-xl p-4 text-center transition hover:bg-[#F3D9DC]/50">
+                <label class="block text-sm font-bold text-[#744253] cursor-pointer hover:underline">
+                    Upload Target PDF Document
+                    <input type="file" name="pdf_file" accept=".pdf" class="hidden">
+                </label>
+                <p id="file-name" class="text-xs text-slate-400 mt-1">No file parsed yet</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Difficulty Mode</label>
+                <select name="difficulty" class="w-full border border-[#B49286] bg-white rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                    <option value="god mode">God Mode</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Total Questions</label>
+                <div class="grid grid-cols-5 gap-1.5 mb-2">
+                    {% for count in [10, 20, 30, 50, 100] %}
+                    <button type="button" data-count="{{ count }}" onclick="setQCount(this.dataset.count)" class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition">{{ count }}</button>
+                    {% endfor %}
+                </div>
+                <input type="number" id="custom_q" name="total_questions" min="10" max="200" value="10" class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Duration (Minutes)</label>
+                <input type="number" name="duration" min="1" value="15" class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+            </div>
+
+            <button type="submit" id="genBtn" class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm">
+                Start Quiz
+            </button>
+        </form>
+    </div>
+
+    {% elif view == 'account' %}
+    <div class="bg-white border border-[#B49286] rounded-3xl p-8 shadow-sm text-center space-y-4 my-4">
+        <div class="w-20 h-20 mx-auto bg-[#F3D9DC] rounded-full flex items-center justify-center p-3 animate-bounce">
+            <img src="{{ url_for('static', filename='images/premium.png') }}" class="max-h-full max-w-full object-contain" alt="Premium">
+        </div>
+        <h3 class="text-2xl font-serif font-bold text-[#744253]">Premium Subscriptions</h3>
+        <p class="text-sm text-slate-500 leading-relaxed px-2">We are currently working on adding this feature! Soon, students will gain access to uncapped custom generation limits, deep conceptual tracking charts, and specialized mock examinations.</p>
+        <div class="inline-block bg-[#D7BEA8] text-[#744253] text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wide">
+            Under Active Development
+        </div>
+    </div>
+
+    {% elif view == 'profile' %}
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
+        <div class="flex justify-between items-center border-b border-[#F3D9DC] pb-3">
+            <h3 class="text-xl font-bold text-[#744253]">User Profile Dashboard</h3>
+            <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">{{ current_user.subscription_status }}</span>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="text-xs bg-emerald-50 border border-emerald-200 text-emerald-600 p-2.5 rounded-xl font-medium mb-2">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form action="/profile/edit" method="POST" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">First Name</label>
+                    <input type="text" name="first_name" value="{{ current_user.first_name or '' }}" class="w-full text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">Last Name</label>
+                    <input type="text" name="last_name" value="{{ current_user.last_name or '' }}" class="w-full text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">Phone Endpoint</label>
+                <input type="text" name="phone" value="{{ current_user.phone or '' }}" class="w-full text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">Configured Email Address</label>
+                <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="Enter email address (Optional)" class="w-full text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
+            </div>
+
+            <div class="pt-4 flex flex-col gap-2">
+                <button type="submit" class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3 rounded-xl transition text-xs shadow-sm">
+                    Save and Edit Account Details
+                </button>
+                <a href="/logout" class="w-full text-center bg-rose-50 border border-rose-200 text-rose-600 font-bold py-3 rounded-xl hover:bg-rose-100 transition text-xs">
+                    Logout of Session
+                </a>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function setQCount(val) {
+    document.getElementById('custom_q').value = val;
+}
+if(document.querySelector('input[name="pdf_file"]')) {
+    document.querySelector('input[name="pdf_file"]').addEventListener('change', e => {
+        document.getElementById('file-name').innerText = e.target.files[0]?.name || "No file parsed yet";
+    });
+}
+if(document.getElementById('quizGenForm')) {
+    document.getElementById('quizGenForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('genBtn');
+        btn.disabled = true; btn.innerText = "Generating Questions...";
+        const res = await fetch('/generate-quiz', { method: 'POST', body: new FormData(e.target) });
+        const data = await res.json();
+        if(data.success) { window.location.href = `/quiz/${data.session_id}`; }
+        else { alert("Error: " + data.error); btn.disabled = false; btn.innerText = "Start Quiz"; }
+    });
+}
+</script>
+{% endblock %}
