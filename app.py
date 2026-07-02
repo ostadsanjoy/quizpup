@@ -146,6 +146,10 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@app.route('/ping', methods=['GET'])
+def ping_server():
+    return jsonify({"status": "healthy", "message": "Stay awake, pup!"}), 200
+
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
