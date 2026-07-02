@@ -1,0 +1,17 @@
+{
+  "appId": "com.sanjoyostad.quizpup",
+  "appName": "QuizPup",
+  "webDir": "www",
+  "server": {
+    "url": "https://quizpup.onrender.com",
+    "cleartext": true
+  }
+},
+"plugins": {
+  "SplashScreen": {
+    "launchShowDuration": 2000,
+    "launchAutoHide": true,
+    "backgroundColor": "#e4923e",
+    "androidScaleType": "CENTER"
+  }
+}

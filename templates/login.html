@@ -81,4 +81,10 @@
         </div>
     </div>
 </div>
+
+<script>
+    if (window.location.pathname === '/login') {
+        localStorage.removeItem('isLoggedIn');
+    }
+</script>
 {% endblock %}
