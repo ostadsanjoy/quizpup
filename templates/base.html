@@ -51,41 +51,38 @@
     </style>
 </head>
 
-<body class="text-slate-800 font-sans min-h-screen flex flex-col items-center">
-
-    <main
-        class="w-full max-w-md bg-[#FFFBFB] h-screen flex flex-col justify-between shadow-xl relative overflow-hidden">
-
-        <div class="flex-1 overflow-y-auto pb-24">
-            {% block content %}{% endblock %}
-        </div>
+<body class="bg-[#FFFBFB]">
+    <div class="app-container">
+        
+        <main class="main-content flex flex-col items-center">
+            <div class="w-full max-w-md bg-[#FFFBFB] relative">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
 
         {% if current_user.is_authenticated %}
-        <nav
-            class="absolute bottom-0 left-0 right-0 h-20 bg-[#D7BEA8] border-t border-[#B49286] flex justify-around items-center px-4 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+        <nav class="bottom-nav-bar h-20 bg-[#D7BEA8] border-t border-[#849286] flex justify-around items-center px-4 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+            
             <a href="/home" class="flex flex-col items-center gap-1 transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/home.png') }}"
-                    class="h-8 w-8 object-contain {% if view == 'home' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
-                    alt="Home">
+                <img src="{{ url_for('static', filename='images/home.png') }}" class="h-8 w-8 object-contain {% if view == 'home' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Home">
             </a>
+
             <a href="/new-quiz" class="flex flex-col items-center gap-1 transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/question.png') }}"
-                    class="h-8 w-8 object-contain {% if view == 'new_quiz' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
-                    alt="Create Quiz">
+                <img src="{{ url_for('static', filename='images/question.png') }}" class="h-8 w-8 object-contain {% if view == 'new_quiz' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Create Quiz">
             </a>
+
             <a href="/account" class="flex flex-col items-center gap-1 transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/premium.png') }}"
-                    class="h-8 w-8 object-contain {% if view == 'account' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
-                    alt="Premium Feature">
+                <img src="{{ url_for('static', filename='images/premium.png') }}" class="h-8 w-8 object-contain {% if view == 'account' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Premium Feature">
             </a>
+
             <a href="/profile" class="flex flex-col items-center gap-1 transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/user.png') }}"
-                    class="h-8 w-8 object-contain {% if view == 'profile' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
-                    alt="Profile Dashboard">
+                <img src="{{ url_for('static', filename='images/user.png') }}" class="h-8 w-8 object-contain {% if view == 'profile' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Profile Dashboard">
             </a>
+
         </nav>
         {% endif %}
-    </main>
+
+    </div>
 </body>
 
 </html>
