@@ -9,10 +9,10 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     # New Registration fields
-    first_name = db.Column(db.String(100), nullable=True)
-    last_name = db.Column(db.String(100), nullable=True)
-    email = db.Column(db.String(150), nullable=True)
-    phone = db.Column(db.String(20), nullable=True)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(150), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
     subscription_status = db.Column(db.String(50), default="Free Tier")
 
 class QuizSession(db.Model):

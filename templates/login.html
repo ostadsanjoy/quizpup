@@ -2,9 +2,10 @@
 {% block content %}
 <div class="p-6 flex flex-col justify-center min-h-[80vh]">
     <div class="bg-white border border-[#B49286] p-8 rounded-[2.5rem] shadow-sm space-y-6 text-center">
-        
+
         <div class="w-28 h-28 mx-auto flex items-center justify-center bg-[#F3D9DC] rounded-full p-2">
-            <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}" class="max-h-full max-w-full object-contain" alt="Mascot">
+            <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}"
+                class="max-h-full max-w-full object-contain" alt="Mascot">
         </div>
 
         <div>
@@ -13,53 +14,67 @@
         </div>
 
         {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="text-xs bg-rose-50 border border-rose-200 text-rose-600 p-2.5 rounded-xl font-medium">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class="text-xs bg-rose-50 border border-rose-200 text-rose-600 p-2.5 rounded-xl font-medium">{{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         <form method="POST" class="space-y-4 text-left">
             <div>
                 <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Username</label>
-                <input type="text" name="username" required class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                <input type="text" name="username" required
+                    class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
-            
+
             {% if action == "Register" %}
             <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">First Name</label>
-                    <input type="text" name="first_name" required class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                    <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">First
+                        Name</label>
+                    <input type="text" name="first_name" required
+                        class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Last Name</label>
-                    <input type="text" name="last_name" required class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                    <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Last
+                        Name</label>
+                    <input type="text" name="last_name" required
+                        class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                 </div>
             </div>
             <div>
                 <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Phone Number</label>
-                <input type="text" name="phone" required class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                <input type="tel" name="phone" required
+                    class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Email <span class="text-slate-400 font-normal">(Optional)</span></label>
-                <input type="email" name="email" class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Email</label>
+                <input type="email" name="email"
+                    class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
             {% endif %}
 
             <div>
                 <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Password</label>
-                <input type="password" name="password" required class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                <input type="password" name="password" required
+                    class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
 
-            <button type="submit" class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm mt-2">
+            <div class="flex justify-between items-center mt-2 text-sm">
+                <a href="/forgot-password" class="text-brown-600 hover:underline text-xs">Forgot Password?</a>
+            </div>
+            <button type="submit"
+                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm mt-2">
                 {{ action }} Session
             </button>
         </form>
 
         <div class="text-xs font-medium text-[#B49286]">
             {% if action == "Login" %}
-            Don't have an account? <a href="/register" class="text-[#744253] font-bold hover:underline">Register Here</a>
+            Don't have an account? <a href="/register" class="text-[#744253] font-bold hover:underline">Register
+                Here</a>
             {% else %}
             Already have an account? <a href="/login" class="text-[#744253] font-bold hover:underline">Login Here</a>
             {% endif %}

@@ -1,14 +1,23 @@
 import os
 import json
 import math
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from datetime import timedelta
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
+from supabase import create_client, Client
+import smtplib
+from email.mime.text import MIMEText
+import random
+from dotenv import load_dotenv
 
-from models import db, User, QuizSession, QuizQuestion
+
+from models import db, User, QuizSession, QuizQuestion 
+
+load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-this-in-production')
@@ -16,6 +25,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -27,14 +37,44 @@ login_manager.login_view = 'login'
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_ACTUAL_GEMINI_API_KEY_HERE")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# ==========================================
+#  MAIL UTILITY FUNCTIONS
+# ==========================================
+def send_otp_email(target_email, otp_code):
+    sender_email = os.environ.get("SENDER_EMAIL")
+    sender_password = os.environ.get("SENDER_PASSWORD")
+    
+    msg = MIMEText(f"Your Quiz App verification security code is: {otp_code}")
+    msg['Subject'] = 'Quiz App Verification Code'
+    msg['From'] = sender_email
+    msg['To'] = target_email
+    
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, target_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"SMTP Mail Error: {str(e)}")
+        return False
 
 # ==========================================
 #          AUTHENTICATION ROUTES
 # ==========================================
+
+@app.route('/')
+def index():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -45,23 +85,44 @@ def register():
         last_name = request.form.get('last_name')
         email = request.form.get('email')
         phone = request.form.get('phone')
-        
+
         if User.query.filter_by(username=username).first():
             flash('Username already exists.')
             return redirect(url_for('register'))
-            
-        hashed_pw = generate_password_hash(password, method='scrypt')
-        new_user = User(
-            username=username, 
-            password_hash=hashed_pw, 
-            first_name=first_name,
-            last_name=last_name,
-            email=email if email else None, 
-            phone=phone
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect(url_for('login'))
+        if User.query.filter_by(email=email).first():
+            flash('Email address already registered.')
+            return redirect(url_for('register'))
+
+        try:
+            auth_response = supabase_client.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "username": username,
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "phone": phone
+                    }
+                }
+            })
+            new_user = User(
+                username=username,
+                password_hash=generate_password_hash(password, method='scrypt'),
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                phone=phone
+            )
+            db.session.add(new_user)
+            db.session.commit()
+
+            flash('A verification link has been sent to your email! Please check your inbox before logging in.', 'success')
+            return redirect(url_for('login'))
+
+        except Exception as e:
+            flash(f"Registration Error: {str(e)}", 'danger')
+
     return render_template('login.html', action="Register")
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -70,10 +131,13 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
+        
         if user and check_password_hash(user.password_hash, password):
-            login_user(user)
+            login_user(user, remember=True)
             return redirect(url_for('home'))
-        flash('Invalid credentials.')
+        else:
+            flash('Invalid username or password.')
+            
     return render_template('login.html', action="Login")
 
 @app.route('/logout')
@@ -82,6 +146,65 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        new_password = request.form.get('new_password')
+        print(f"--- DEBUG: Trying reset for Username: {username}, Email: {email} ---")
+        
+        user = User.query.filter_by(username=username, email=email).first()
+        
+        if user:
+            print("--- DEBUG: User found in database! ---")
+            generated_otp = str(random.randint(100000, 999999))
+            
+            session['reset_data'] = {
+                'user_id': user.id,
+                'new_password_hash': generate_password_hash(new_password, method='scrypt'),
+                'otp': generated_otp
+            }
+            
+            print("--- DEBUG: Attempting to send SMTP email... ---")
+            if send_otp_email(email, generated_otp):
+                print("--- DEBUG: Email sent successfully! ---")
+                flash('A 6-digit verification code has been sent to your email.', 'success')
+                return redirect(url_for('verify_reset_otp'))
+            else:
+                print("--- DEBUG: send_otp_email returned False! ---")
+                flash('Failed to send verification email. Check server configuration.', 'danger')
+        else:
+            print("--- DEBUG: User NOT found in the database. ---")
+            flash('Account details not found.', 'danger')
+            
+    return render_template('forgot_password.html', action="Reset")
+
+@app.route('/verify-otp', methods=['GET', 'POST'])
+def verify_reset_otp():
+    reset_data = session.get('reset_data')
+    if not reset_data:
+        flash('No password reset session active.', 'danger')
+        return redirect(url_for('forgot_password'))
+
+    if request.method == 'POST':
+        user_otp = request.form.get('otp')
+        if user_otp == reset_data['otp']:
+            user = User.query.get(reset_data['user_id'])
+            if user:
+                user.password_hash = reset_data['new_password_hash']
+                db.session.commit()
+                session.pop('reset_data', None)
+                
+                flash('Password updated successfully! Please log in.', 'success')
+                return redirect(url_for('login'))
+            else:
+                flash('User account no longer found.', 'danger')
+                return redirect(url_for('forgot_password'))
+        else:
+            flash('Invalid verification code. Please try again.', 'danger')
+
+    return render_template('verify_otp.html')
 
 # ==========================================
 #       WIREFRAME DASHBOARD PANELS
