@@ -121,10 +121,16 @@ function showQuestion() {
         }
         
         row.className = classString;
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+
         row.innerHTML = `
             <div class="flex items-center gap-3">
                 <input type="radio" name="opts-${item.id}" value="${indexId}" ${selectedState} ${disabledState} onchange="logSelection(${item.id}, ${indexId})" class="h-4 w-4 text-indigo-600">
-                <span>${indexId}. ${item[indexId]}</span>
+                <span>${indexId}. ${escapeHtml(item[indexId])}</span>
             </div>
             ${badgeHtml}
         `;

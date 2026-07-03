@@ -4,7 +4,7 @@
   "webDir": "www",
   "server": {
     "url": "https://quizpup.onrender.com",
-    "cleartext": true,
+    "cleartext": false,
     "allowNavigation": [
       "quizpup.onrender.com"
     ]

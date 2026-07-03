@@ -11,7 +11,7 @@ class User(UserMixin, db.Model):
     # New Registration fields
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(150), nullable=False)
+    email = db.Column(db.String(150), unique=True, nullable=False)
     phone = db.Column(db.String(20), nullable=False)
     subscription_status = db.Column(db.String(50), default="Free Tier")
 
@@ -40,5 +40,5 @@ class QuizQuestion(db.Model):
     option_4 = db.Column(db.String(255), nullable=False)
     correct_option = db.Column(db.Integer, nullable=False) # 1, 2, 3, or 4
     hint = db.Column(db.Text, nullable=True)
-    explanation = db.Column(db.Text, nullable=True) # Post-attempt feedback structure
+    explanation = db.Column(db.Text, nullable=True)
     user_answer = db.Column(db.Integer, nullable=True)

@@ -2,14 +2,15 @@ import os
 import json
 import math
 import random
+import uuid
 import smtplib
-import resend
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
@@ -26,6 +27,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
@@ -43,7 +45,12 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-resend.api_key = os.environ.get("RESEND_API_KEY")
+GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
+MAIL_FROM_NAME = "QuizPup"
+
+OTP_VALID_MINUTES = 10
+OTP_MAX_ATTEMPTS = 5
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -53,21 +60,23 @@ def load_user(user_id):
 #  MAIL UTILITY FUNCTIONS
 # ==========================================
 def send_otp_email(target_email, otp_code):
-    if not resend.api_key:
-        print("--- ERROR: RESEND_API_KEY environment variable is missing! ---")
+    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
+        print("--- ERROR: GMAIL_ADDRESS or GMAIL_APP_PASSWORD environment variable is missing! ---")
         return False
-        
+
+    msg = MIMEText(f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>", "html")
+    msg["Subject"] = "Quiz App Verification Code"
+    msg["From"] = f"{MAIL_FROM_NAME} <{GMAIL_ADDRESS}>"
+    msg["To"] = target_email
+
     try:
-        response = resend.Emails.send({
-            "from": "QuizPup <onboarding@resend.dev>",
-            "to": target_email,
-            "subject": "Quiz App Verification Code",
-            "html": f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
-        })
-        print(f"Resend success response: {response}")
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, [target_email], msg.as_string())
+        print(f"Gmail SMTP: OTP email sent to {target_email}")
         return True
     except Exception as e:
-        print(f"Resend HTTP API Error: {str(e)}")
+        print(f"Gmail SMTP Error: {str(e)}")
         return False
 
 # ==========================================
@@ -90,6 +99,10 @@ def register():
         email = request.form.get('email')
         phone = request.form.get('phone')
 
+        if not email:
+            flash('Email address is required.', 'danger')
+            return redirect(url_for('register'))
+
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'danger')
             return redirect(url_for('register'))
@@ -97,9 +110,24 @@ def register():
             flash('Email address already registered.', 'danger')
             return redirect(url_for('register'))
 
+        new_user = User(
+            username=username,
+            password_hash=generate_password_hash(password, method='scrypt'),
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone=phone
+        )
+        db.session.add(new_user)
         try:
-            # Trigger confirmation email sequence inside Supabase ecosystem
-            auth_response = supabase_client.auth.sign_up({
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            flash('That username or email was just taken by someone else. Please try again.', 'danger')
+            return redirect(url_for('register'))
+
+        try:
+            supabase_client.auth.sign_up({
                 "email": email,
                 "password": password,
                 "options": {
@@ -111,23 +139,11 @@ def register():
                     }
                 }
             })
-            
-            new_user = User(
-                username=username,
-                password_hash=generate_password_hash(password, method='scrypt'),
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-                phone=phone
-            )
-            db.session.add(new_user)
-            db.session.commit()
-
             flash('A verification link has been sent to your email! Please confirm it before logging in.', 'success')
-            return redirect(url_for('login'))
-
         except Exception as e:
-            flash(f"Registration Error: {str(e)}", 'danger')
+            flash(f"Account created, but the confirmation email could not be sent ({str(e)}). Contact support if you can't log in.", 'warning')
+
+        return redirect(url_for('login'))
 
     return render_template('login.html', action="Register")
 
@@ -153,7 +169,7 @@ def login():
                     flash('Please check your email and click the verification link before logging in.', 'warning')
                 else:
                     session.permanent = True
-                    login_user(user, remember=False)  # Fixed: Changed to False
+                    login_user(user, remember=False)
                     return redirect(url_for('home'))
         else:
             flash('Invalid username or password.', 'danger')       
@@ -196,7 +212,9 @@ def forgot_password():
             session['reset_data'] = {
                 'user_id': user.id,
                 'new_password_hash': generate_password_hash(new_password, method='scrypt'),
-                'otp': generated_otp
+                'otp': generated_otp,
+                'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES)).isoformat(),
+                'attempts': 0
             }
             
             print("--- DEBUG: Attempting to send email via Resend API... ---")
@@ -224,6 +242,17 @@ def verify_reset_otp():
         return redirect(url_for('forgot_password'))
 
     if request.method == 'POST':
+        expires_at = datetime.fromisoformat(reset_data['expires_at'])
+        if datetime.now(timezone.utc) > expires_at:
+            session.pop('reset_data', None)
+            flash('Your verification code expired. Please request a new one.', 'danger')
+            return redirect(url_for('forgot_password'))
+
+        if reset_data.get('attempts', 0) >= OTP_MAX_ATTEMPTS:
+            session.pop('reset_data', None)
+            flash('Too many incorrect attempts. Please request a new code.', 'danger')
+            return redirect(url_for('forgot_password'))
+
         user_otp = request.form.get('otp')
         if user_otp == reset_data['otp']:
             user = User.query.get(reset_data['user_id'])
@@ -238,7 +267,10 @@ def verify_reset_otp():
                 flash('User account no longer found.', 'danger')
                 return redirect(url_for('forgot_password'))
         else:
-            flash('Invalid verification code. Please try again.', 'danger')
+            reset_data['attempts'] = reset_data.get('attempts', 0) + 1
+            session['reset_data'] = reset_data
+            remaining = OTP_MAX_ATTEMPTS - reset_data['attempts']
+            flash(f'Invalid verification code. {remaining} attempt(s) remaining.', 'danger')
 
     return render_template('verify_otp.html')
 
@@ -246,7 +278,6 @@ def verify_reset_otp():
 #       WIREFRAME DASHBOARD PANELS
 # ==========================================
 
-# Fixed: Collision cleared by removing duplicate root endpoint definition
 @app.route('/home')
 @login_required
 def home():
@@ -298,7 +329,8 @@ def generate_quiz():
     source_text = ""
     if 'pdf_file' in request.files and request.files['pdf_file'].filename != '':
         file = request.files['pdf_file']
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        safe_name = secure_filename(file.filename) or "upload.pdf"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{safe_name}")
         file.save(filepath)
         try:
             reader = PdfReader(filepath)
@@ -453,6 +485,8 @@ def run_quiz(session_id):
 @login_required
 def get_quiz_questions(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
+    if session_instance.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
     
     questions = [{
         "id": q.id,
@@ -490,7 +524,11 @@ def get_quiz_questions(session_id):
 @login_required
 def fetch_hint(session_id, question_id):
     session_instance = QuizSession.query.get_or_404(session_id)
+    if session_instance.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
     question = QuizQuestion.query.get_or_404(question_id)
+    if question.session_id != session_instance.id:
+        return jsonify({"error": "Not authorized"}), 403
     
     if session_instance.difficulty in ['hard', 'god mode']:
         return jsonify({"error": f"Hints are completely locked under {session_instance.difficulty} mode constraints."}), 403
@@ -507,6 +545,8 @@ def fetch_hint(session_id, question_id):
 @login_required
 def submit_quiz(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
+    if session_instance.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
     if session_instance.is_completed:
         return jsonify({"error": "Session execution loop already completed."}), 400
         
@@ -565,4 +605,4 @@ def submit_quiz(session_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
