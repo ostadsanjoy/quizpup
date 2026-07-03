@@ -2,21 +2,20 @@ import os
 import json
 import math
 import random
-import uuid
-import requests
-from datetime import timedelta, datetime, timezone
+import smtplib
+import resend
+from datetime import timedelta
 from dotenv import load_dotenv
-
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
+from email.mime.text import MIMEText
 
-from models import db, User, QuizSession, QuizQuestion 
+from models import db, User, QuizSession, QuizQuestion
 
 load_dotenv()
 
@@ -26,13 +25,16 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -44,70 +46,38 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
-BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL")
-MAIL_FROM_NAME = "QuizPup"
+resend.api_key = os.environ.get("RESEND_API_KEY")
 
-OTP_VALID_MINUTES = 10
-OTP_MAX_ATTEMPTS = 5
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ==========================================
-#  MAIL UTILITY FUNCTIONS
-# ==========================================
-def send_email(target_email, subject, html_body):
-    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
-        print("--- ERROR: BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable is missing! ---")
-        return False
 
-    try:
-        response = requests.post(
-            "https://api.brevo.com/v3/smtp/email",
-            headers={
-                "api-key": BREVO_API_KEY,
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
-            json={
-                "sender": {"name": MAIL_FROM_NAME, "email": BREVO_SENDER_EMAIL},
-                "to": [{"email": target_email}],
-                "subject": subject,
-                "htmlContent": html_body
-            },
-            timeout=10
-        )
-        if response.status_code in (200, 201):
-            print(f"Brevo API: email sent to {target_email}")
-            return True
-        print(f"Brevo API Error: {response.status_code} {response.text}")
-        return False
-    except Exception as e:
-        print(f"Brevo API Error: {str(e)}")
-        return False
+# ==========================================
+# MAIL UTILITY FUNCTIONS
+# ==========================================
 
 def send_otp_email(target_email, otp_code):
-    return send_email(
-        target_email,
-        "Quiz App Verification Code",
-        f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
-    )
+    if not resend.api_key:
+        print("--- ERROR: RESEND_API_KEY environment variable is missing! ---")
+        return False
+    try:
+        response = resend.Emails.send({
+            "from": "QuizPup <onboarding@resend.dev>",
+            "to": target_email,
+            "subject": "Quiz App Verification Code",
+            "html": f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
+        })
+        print(f"Resend success response: {response}")
+        return True
+    except Exception as e:
+        print(f"Resend HTTP API Error: {str(e)}")
+        return False
 
-def send_verification_email(target_email, otp_code):
-    return send_email(
-        target_email,
-        "Verify your QuizPup account",
-        f"<p>Welcome to QuizPup! Your account verification code is: <strong>{otp_code}</strong></p>"
-        f"<p>This code expires in {OTP_VALID_MINUTES} minutes.</p>"
-    )
-
-def generate_otp():
-    return str(random.randint(100000, 999999))
 
 # ==========================================
-#          AUTHENTICATION ROUTES
+# AUTHENTICATION ROUTES
 # ==========================================
 
 @app.route('/')
@@ -115,6 +85,7 @@ def index():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
     return redirect(url_for('login'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -126,40 +97,17 @@ def register():
         email = request.form.get('email')
         phone = request.form.get('phone')
 
-        if not email:
-            flash('Email address is required.', 'danger')
-            return redirect(url_for('register'))
-
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'danger')
             return redirect(url_for('register'))
+
         if User.query.filter_by(email=email).first():
             flash('Email address already registered.', 'danger')
             return redirect(url_for('register'))
 
-        otp_code = generate_otp()
-        new_user = User(
-            username=username,
-            password_hash=generate_password_hash(password, method='scrypt'),
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            phone=phone,
-            is_verified=False,
-            verification_otp=otp_code,
-            verification_otp_expires=datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES),
-            verification_attempts=0
-        )
-        db.session.add(new_user)
         try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            flash('That username or email was just taken by someone else. Please try again.', 'danger')
-            return redirect(url_for('register'))
-
-        try:
-            supabase_client.auth.sign_up({
+            # Trigger confirmation email sequence inside Supabase ecosystem
+            auth_response = supabase_client.auth.sign_up({
                 "email": email,
                 "password": password,
                 "options": {
@@ -171,86 +119,26 @@ def register():
                     }
                 }
             })
+
+            new_user = User(
+                username=username,
+                password_hash=generate_password_hash(password, method='scrypt'),
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                phone=phone
+            )
+            db.session.add(new_user)
+            db.session.commit()
+
+            flash('A verification link has been sent to your email! Please confirm it before logging in.', 'success')
+            return redirect(url_for('login'))
+
         except Exception as e:
-            print(f"Supabase sign_up notice: {str(e)}")
-
-        session['pending_verification_user_id'] = new_user.id
-
-        if send_verification_email(email, otp_code):
-            flash('Account created! Check your email for a 6-digit verification code.', 'success')
-        else:
-            flash('Account created, but we could not send the verification email right now. Tap "Resend code" on the next screen to try again.', 'warning')
-
-        return redirect(url_for('verify_email'))
+            flash(f"Registration Error: {str(e)}", 'danger')
 
     return render_template('login.html', action="Register")
 
-@app.route('/verify-email', methods=['GET', 'POST'])
-def verify_email():
-    user_id = session.get('pending_verification_user_id')
-    if not user_id:
-        flash('No pending verification found. Please register or log in.', 'danger')
-        return redirect(url_for('login'))
-
-    user = User.query.get(user_id)
-    if not user:
-        session.pop('pending_verification_user_id', None)
-        flash('Account not found.', 'danger')
-        return redirect(url_for('register'))
-
-    if user.is_verified:
-        session.pop('pending_verification_user_id', None)
-        flash('Your account is already verified. Please log in.', 'success')
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        expired = (not user.verification_otp_expires) or datetime.now(timezone.utc) > user.verification_otp_expires
-        if expired:
-            flash('Your verification code expired. Please request a new one.', 'danger')
-        elif user.verification_attempts >= OTP_MAX_ATTEMPTS:
-            flash('Too many incorrect attempts. Please request a new code.', 'danger')
-        else:
-            submitted_otp = request.form.get('otp')
-            if submitted_otp == user.verification_otp:
-                user.is_verified = True
-                user.verification_otp = None
-                user.verification_otp_expires = None
-                user.verification_attempts = 0
-                db.session.commit()
-                session.pop('pending_verification_user_id', None)
-                flash('Email verified! Please log in.', 'success')
-                return redirect(url_for('login'))
-            else:
-                user.verification_attempts += 1
-                db.session.commit()
-                remaining = OTP_MAX_ATTEMPTS - user.verification_attempts
-                flash(f'Invalid verification code. {remaining} attempt(s) remaining.', 'danger')
-
-    return render_template('verify_email.html', email=user.email)
-
-@app.route('/verify-email/resend', methods=['POST'])
-def resend_verification_email():
-    user_id = session.get('pending_verification_user_id')
-    if not user_id:
-        flash('No pending verification found.', 'danger')
-        return redirect(url_for('login'))
-
-    user = User.query.get(user_id)
-    if not user or user.is_verified:
-        return redirect(url_for('login'))
-
-    otp_code = generate_otp()
-    user.verification_otp = otp_code
-    user.verification_otp_expires = datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES)
-    user.verification_attempts = 0
-    db.session.commit()
-
-    if send_verification_email(user.email, otp_code):
-        flash('A new verification code has been sent.', 'success')
-    else:
-        flash('Could not send the email right now. Please try again shortly.', 'danger')
-
-    return redirect(url_for('verify_email'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -260,45 +148,46 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+
         user = User.query.filter_by(username=username).first()
-        
+
         if user and check_password_hash(user.password_hash, password):
-            if not user.is_verified:
-                session['pending_verification_user_id'] = user.id
-                flash('Please verify your email before logging in. Check your inbox for the code.', 'warning')
-                return redirect(url_for('verify_email'))
-
             try:
-                supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
+                sb_auth = supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
+                session.permanent = True
+                login_user(user, remember=False)
+                return redirect(url_for('home'))
             except Exception as sb_err:
-                print(f"Supabase sign_in notice: {str(sb_err)}")
-
-            session.permanent = True
-            login_user(user, remember=False)
-            return redirect(url_for('home'))
+                if "email_not_confirmed" in str(sb_err).lower() or "confirm your email" in str(sb_err).lower():
+                    flash('Please check your email and click the verification link before logging in.', 'warning')
+                else:
+                    session.permanent = True
+                    login_user(user, remember=False)  # Fixed: Changed to False
+                    return redirect(url_for('home'))
         else:
-            flash('Invalid username or password.', 'danger')       
-            
+            flash('Invalid username or password.', 'danger')
+
     return render_template('login.html', action="Login")
+
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     session.clear()
-    
     response = make_response(redirect(url_for('login')))
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     response.delete_cookie('session', path='/')
     response.delete_cookie('remember_token', path='/')
-    
     return response
+
 
 @app.route('/ping', methods=['GET'])
 def ping_server():
     return jsonify({"status": "healthy", "message": "Stay awake, pup!"}), 200
+
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
@@ -306,25 +195,23 @@ def forgot_password():
         username = request.form.get('username')
         email = request.form.get('email')
         new_password = request.form.get('new_password')
+
         print(f"--- DEBUG: Trying reset for Username: {username}, Email: {email} ---")
-        
         user = User.query.filter_by(username=username, email=email).first()
-        
+
         if user:
             print("--- DEBUG: User found in database! ---")
             generated_otp = str(random.randint(100000, 999999))
-            
+
             session['reset_data'] = {
                 'user_id': user.id,
                 'new_password_hash': generate_password_hash(new_password, method='scrypt'),
-                'otp': generated_otp,
-                'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES)).isoformat(),
-                'attempts': 0
+                'otp': generated_otp
             }
-            
+
             print("--- DEBUG: Attempting to send email via Resend API... ---")
             email_status = send_otp_email(email, generated_otp)
-            
+
             if email_status:
                 print("--- DEBUG: Email sent successfully! ---")
                 flash('A 6-digit verification code has been sent to your email.', 'success')
@@ -336,8 +223,9 @@ def forgot_password():
         else:
             print("--- DEBUG: User NOT found in the database. ---")
             flash('Account details not found.', 'danger')
-            
+
     return render_template('forgot_password.html', action="Reset")
+
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
 def verify_reset_otp():
@@ -347,41 +235,30 @@ def verify_reset_otp():
         return redirect(url_for('forgot_password'))
 
     if request.method == 'POST':
-        expires_at = datetime.fromisoformat(reset_data['expires_at'])
-        if datetime.now(timezone.utc) > expires_at:
-            session.pop('reset_data', None)
-            flash('Your verification code expired. Please request a new one.', 'danger')
-            return redirect(url_for('forgot_password'))
-
-        if reset_data.get('attempts', 0) >= OTP_MAX_ATTEMPTS:
-            session.pop('reset_data', None)
-            flash('Too many incorrect attempts. Please request a new code.', 'danger')
-            return redirect(url_for('forgot_password'))
-
         user_otp = request.form.get('otp')
+
         if user_otp == reset_data['otp']:
             user = User.query.get(reset_data['user_id'])
             if user:
                 user.password_hash = reset_data['new_password_hash']
                 db.session.commit()
                 session.pop('reset_data', None)
-                
                 flash('Password updated successfully! Please log in.', 'success')
                 return redirect(url_for('login'))
             else:
                 flash('User account no longer found.', 'danger')
                 return redirect(url_for('forgot_password'))
         else:
-            reset_data['attempts'] = reset_data.get('attempts', 0) + 1
-            session['reset_data'] = reset_data
-            remaining = OTP_MAX_ATTEMPTS - reset_data['attempts']
-            flash(f'Invalid verification code. {remaining} attempt(s) remaining.', 'danger')
+            flash('Invalid verification code. Please try again.', 'danger')
 
     return render_template('verify_otp.html')
 
+
 # ==========================================
-#       WIREFRAME DASHBOARD PANELS
+# WIREFRAME DASHBOARD PANELS
 # ==========================================
+
+# Fixed: Collision cleared by removing duplicate root endpoint definition
 
 @app.route('/home')
 @login_required
@@ -389,20 +266,24 @@ def home():
     past_quizzes = QuizSession.query.filter_by(user_id=current_user.id).order_by(QuizSession.created_at.desc()).all()
     return render_template('dashboard.html', past_quizzes=past_quizzes, view="home")
 
+
 @app.route('/new-quiz')
 @login_required
 def new_quiz_view():
     return render_template('dashboard.html', view="new_quiz")
+
 
 @app.route('/account')
 @login_required
 def account():
     return render_template('dashboard.html', view="account")
 
+
 @app.route('/profile')
 @login_required
 def profile():
     return render_template('dashboard.html', view="profile")
+
 
 @app.route('/profile/edit', methods=['POST'])
 @login_required
@@ -416,8 +297,9 @@ def edit_profile():
     flash('Profile updated successfully!')
     return redirect(url_for('profile'))
 
+
 # ==========================================
-#          CORE ENGINE & AI LOGIC
+# CORE ENGINE & AI LOGIC
 # ==========================================
 
 @app.route('/generate-quiz', methods=['POST'])
@@ -427,15 +309,14 @@ def generate_quiz():
     difficulty = request.form.get('difficulty', 'easy')
     total_q = int(request.form.get('total_questions', 10))
     duration = int(request.form.get('duration', 10))
-    
+
     if total_q < 10 or total_q > 200:
         return jsonify({"error": "Questions must stay between 10 and 200 items."}), 400
 
     source_text = ""
     if 'pdf_file' in request.files and request.files['pdf_file'].filename != '':
         file = request.files['pdf_file']
-        safe_name = secure_filename(file.filename) or "upload.pdf"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{safe_name}")
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filepath)
         try:
             reader = PdfReader(filepath)
@@ -453,7 +334,7 @@ def generate_quiz():
         hints_allowed = 0
 
     system_tone = "highly complex, rigorous, and university-level" if difficulty == "god mode" else "standard academic evaluation"
-    
+
     if source_text:
         primary_model = 'gemini-2.5-flash'
         context_source = f"Text Source Material Context: {source_text[:40000]}"
@@ -501,15 +382,16 @@ def generate_quiz():
             print(f"Executing Batch request iteration {i+1}/{loops_needed} for {current_batch_target} items...")
 
             prompt = f"""
-            You are an elite educational testing engine. Generate a comprehensive multiple-choice evaluation quiz strictly based on the provided material.
-            {context_source}
-            
-            Requirements:
-            1. Output exactly {current_batch_target} distinct and unique questions. This is batch chunk {i+1} of {loops_needed}.
-            2. Difficulty setting: {difficulty} ({system_tone}).
-            3. Provide a short, single-sentence indirect hint for each question.
-            4. Provide a clear, maximum 2-sentence conceptual explanation details string.
-            """
+You are an elite educational testing engine. Generate a comprehensive multiple-choice evaluation quiz strictly based on the provided material.
+
+{context_source}
+
+Requirements:
+1. Output exactly {current_batch_target} distinct and unique questions. This is batch chunk {i+1} of {loops_needed}.
+2. Difficulty setting: {difficulty} ({system_tone}).
+3. Provide a short, single-sentence indirect hint for each question.
+4. Provide a clear, maximum 2-sentence conceptual explanation details string.
+"""
 
             try:
                 response = ai_client.models.generate_content(
@@ -569,13 +451,13 @@ def generate_quiz():
         db.session.commit()
 
         return jsonify({"success": True, "session_id": quiz_session_instance.id})
-        
+
     except Exception as e:
         return jsonify({"error": f"Framework Processing Failure: {str(e)}"}), 500
 
 
 # ==========================================
-#          RUNNING EXAMINATION INTERFACE
+# RUNNING EXAMINATION INTERFACE
 # ==========================================
 
 @app.route('/quiz/<int:session_id>')
@@ -586,13 +468,12 @@ def run_quiz(session_id):
         return redirect(url_for('home'))
     return render_template('quiz.html', session=session_instance)
 
+
 @app.route('/api/quiz/<int:session_id>/questions')
 @login_required
 def get_quiz_questions(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
-    if session_instance.user_id != current_user.id:
-        return jsonify({"error": "Not authorized"}), 403
-    
+
     questions = [{
         "id": q.id,
         "question": q.question_text,
@@ -601,9 +482,10 @@ def get_quiz_questions(session_id):
         "3": q.option_3,
         "4": q.option_4
     } for q in session_instance.questions]
-    
+
     explanations_map = {}
     saved_answers_map = {}
+
     if session_instance.is_completed:
         for q in session_instance.questions:
             saved_answers_map[q.id] = q.user_answer
@@ -611,7 +493,7 @@ def get_quiz_questions(session_id):
                 "correct": q.correct_option,
                 "explanation": q.explanation
             }
-            
+
     return jsonify({
         "duration": session_instance.duration_minutes,
         "difficulty": session_instance.difficulty,
@@ -625,36 +507,32 @@ def get_quiz_questions(session_id):
         "explanations": explanations_map
     })
 
+
 @app.route('/api/quiz/<int:session_id>/hint/<int:question_id>', methods=['POST'])
 @login_required
 def fetch_hint(session_id, question_id):
     session_instance = QuizSession.query.get_or_404(session_id)
-    if session_instance.user_id != current_user.id:
-        return jsonify({"error": "Not authorized"}), 403
     question = QuizQuestion.query.get_or_404(question_id)
-    if question.session_id != session_instance.id:
-        return jsonify({"error": "Not authorized"}), 403
-    
+
     if session_instance.difficulty in ['hard', 'god mode']:
         return jsonify({"error": f"Hints are completely locked under {session_instance.difficulty} mode constraints."}), 403
-        
+
     if session_instance.difficulty == 'medium':
         if session_instance.hints_remaining <= 0:
             return jsonify({"error": "No hint allocations remaining for this session."}), 403
         session_instance.hints_remaining -= 1
         db.session.commit()
-        
+
     return jsonify({"hint": question.hint, "hints_remaining": session_instance.hints_remaining})
+
 
 @app.route('/api/quiz/<int:session_id>/submit', methods=['POST'])
 @login_required
 def submit_quiz(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
-    if session_instance.user_id != current_user.id:
-        return jsonify({"error": "Not authorized"}), 403
     if session_instance.is_completed:
         return jsonify({"error": "Session execution loop already completed."}), 400
-        
+
     data = request.json.get('answers', {})
     score = 0
     wrong_context = []
@@ -664,33 +542,35 @@ def submit_quiz(session_id):
         user_ans = data.get(str(q.id))
         user_ans_int = int(user_ans) if user_ans is not None else None
         q.user_answer = user_ans_int
-        
+
         if user_ans_int == q.correct_option:
             score += 1
         else:
             wrong_context.append({
-                "question": q.question_text, 
-                "missed_answer_index": user_ans_int, 
+                "question": q.question_text,
+                "missed_answer_index": user_ans_int,
                 "actual_correct_index": q.correct_option
             })
-            
+
         explanations_map[q.id] = {
             "correct": q.correct_option,
             "explanation": q.explanation
         }
-            
+
     session_instance.score = score
     session_instance.is_completed = True
-    
+
     recommendation = "Incredible work! No visible lagging gaps discovered across the evaluated topic framework criteria."
+
     if wrong_context:
         rec_prompt = f"""
-        A student completed a comprehensive exam focusing on domain topic matrix: '{session_instance.topic}'.
-        They missed the following evaluation conceptual targets:
-        {json.dumps(wrong_context[:12])}
-        
-        Generate a constructive, personalized 2-3 sentence lagging evaluation critique summary pointing out exactly what sub-thematic focus point they are struggling with and where they must study next.
-        """
+A student completed a comprehensive exam focusing on domain topic matrix: '{session_instance.topic}'.
+
+They missed the following evaluation conceptual targets:
+{json.dumps(wrong_context[:12])}
+
+Generate a constructive, personalized 2-3 sentence lagging evaluation critique summary pointing out exactly what sub-thematic focus point they are struggling with and where they must study next.
+"""
         try:
             rec_response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=rec_prompt)
             recommendation = rec_response.text
@@ -699,7 +579,7 @@ def submit_quiz(session_id):
 
     session_instance.recommendation = recommendation
     db.session.commit()
-    
+
     return jsonify({
         "score": score,
         "total": session_instance.total_questions,
@@ -707,7 +587,6 @@ def submit_quiz(session_id):
         "explanations": explanations_map
     })
 
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
+    app.run(debug=True)
