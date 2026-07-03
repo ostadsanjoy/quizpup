@@ -13,6 +13,7 @@ import smtplib
 from email.mime.text import MIMEText
 import random
 from dotenv import load_dotenv
+from email.mime.text import MIMEText
 
 
 from models import db, User, QuizSession, QuizQuestion 
@@ -59,7 +60,7 @@ def send_otp_email(target_email, otp_code):
     msg['To'] = target_email
     
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=5) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, target_email, msg.as_string())
         return True
