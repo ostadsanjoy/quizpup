@@ -153,7 +153,7 @@ def login():
                     flash('Please check your email and click the verification link before logging in.', 'warning')
                 else:
                     session.permanent = True
-                    login_user(user, remember=True)
+                    login_user(user, remember=False)  # Fixed: Changed to False
                     return redirect(url_for('home'))
         else:
             flash('Invalid username or password.', 'danger')       
@@ -170,8 +170,8 @@ def logout():
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
-    response.delete_cookie('session')
-    response.delete_cookie('remember_token')
+    response.delete_cookie('session', path='/')
+    response.delete_cookie('remember_token', path='/')
     
     return response
 
