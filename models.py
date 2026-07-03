@@ -14,6 +14,10 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     phone = db.Column(db.String(20), nullable=False)
     subscription_status = db.Column(db.String(50), default="Free Tier")
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    verification_otp = db.Column(db.String(6), nullable=True)
+    verification_otp_expires = db.Column(db.DateTime, nullable=True)
+    verification_attempts = db.Column(db.Integer, default=0)
 
 class QuizSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -40,5 +44,5 @@ class QuizQuestion(db.Model):
     option_4 = db.Column(db.String(255), nullable=False)
     correct_option = db.Column(db.Integer, nullable=False) # 1, 2, 3, or 4
     hint = db.Column(db.Text, nullable=True)
-    explanation = db.Column(db.Text, nullable=True)
+    explanation = db.Column(db.Text, nullable=True) # Post-attempt feedback structure
     user_answer = db.Column(db.Integer, nullable=True)

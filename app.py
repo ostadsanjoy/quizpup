@@ -58,7 +58,7 @@ def load_user(user_id):
 # ==========================================
 #  MAIL UTILITY FUNCTIONS
 # ==========================================
-def send_otp_email(target_email, otp_code):
+def send_email(target_email, subject, html_body):
     if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
         print("--- ERROR: BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable is missing! ---")
         return False
@@ -74,19 +74,37 @@ def send_otp_email(target_email, otp_code):
             json={
                 "sender": {"name": MAIL_FROM_NAME, "email": BREVO_SENDER_EMAIL},
                 "to": [{"email": target_email}],
-                "subject": "Quiz App Verification Code",
-                "htmlContent": f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
+                "subject": subject,
+                "htmlContent": html_body
             },
             timeout=10
         )
         if response.status_code in (200, 201):
-            print(f"Brevo API: OTP email sent to {target_email}")
+            print(f"Brevo API: email sent to {target_email}")
             return True
         print(f"Brevo API Error: {response.status_code} {response.text}")
         return False
     except Exception as e:
         print(f"Brevo API Error: {str(e)}")
         return False
+
+def send_otp_email(target_email, otp_code):
+    return send_email(
+        target_email,
+        "Quiz App Verification Code",
+        f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
+    )
+
+def send_verification_email(target_email, otp_code):
+    return send_email(
+        target_email,
+        "Verify your QuizPup account",
+        f"<p>Welcome to QuizPup! Your account verification code is: <strong>{otp_code}</strong></p>"
+        f"<p>This code expires in {OTP_VALID_MINUTES} minutes.</p>"
+    )
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
 
 # ==========================================
 #          AUTHENTICATION ROUTES
@@ -119,13 +137,18 @@ def register():
             flash('Email address already registered.', 'danger')
             return redirect(url_for('register'))
 
+        otp_code = generate_otp()
         new_user = User(
             username=username,
             password_hash=generate_password_hash(password, method='scrypt'),
             first_name=first_name,
             last_name=last_name,
             email=email,
-            phone=phone
+            phone=phone,
+            is_verified=False,
+            verification_otp=otp_code,
+            verification_otp_expires=datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES),
+            verification_attempts=0
         )
         db.session.add(new_user)
         try:
@@ -148,13 +171,86 @@ def register():
                     }
                 }
             })
-            flash('A verification link has been sent to your email! Please confirm it before logging in.', 'success')
         except Exception as e:
-            flash(f"Account created, but the confirmation email could not be sent ({str(e)}). Contact support if you can't log in.", 'warning')
+            print(f"Supabase sign_up notice: {str(e)}")
 
-        return redirect(url_for('login'))
+        session['pending_verification_user_id'] = new_user.id
+
+        if send_verification_email(email, otp_code):
+            flash('Account created! Check your email for a 6-digit verification code.', 'success')
+        else:
+            flash('Account created, but we could not send the verification email right now. Tap "Resend code" on the next screen to try again.', 'warning')
+
+        return redirect(url_for('verify_email'))
 
     return render_template('login.html', action="Register")
+
+@app.route('/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    user_id = session.get('pending_verification_user_id')
+    if not user_id:
+        flash('No pending verification found. Please register or log in.', 'danger')
+        return redirect(url_for('login'))
+
+    user = User.query.get(user_id)
+    if not user:
+        session.pop('pending_verification_user_id', None)
+        flash('Account not found.', 'danger')
+        return redirect(url_for('register'))
+
+    if user.is_verified:
+        session.pop('pending_verification_user_id', None)
+        flash('Your account is already verified. Please log in.', 'success')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        expired = (not user.verification_otp_expires) or datetime.now(timezone.utc) > user.verification_otp_expires
+        if expired:
+            flash('Your verification code expired. Please request a new one.', 'danger')
+        elif user.verification_attempts >= OTP_MAX_ATTEMPTS:
+            flash('Too many incorrect attempts. Please request a new code.', 'danger')
+        else:
+            submitted_otp = request.form.get('otp')
+            if submitted_otp == user.verification_otp:
+                user.is_verified = True
+                user.verification_otp = None
+                user.verification_otp_expires = None
+                user.verification_attempts = 0
+                db.session.commit()
+                session.pop('pending_verification_user_id', None)
+                flash('Email verified! Please log in.', 'success')
+                return redirect(url_for('login'))
+            else:
+                user.verification_attempts += 1
+                db.session.commit()
+                remaining = OTP_MAX_ATTEMPTS - user.verification_attempts
+                flash(f'Invalid verification code. {remaining} attempt(s) remaining.', 'danger')
+
+    return render_template('verify_email.html', email=user.email)
+
+@app.route('/verify-email/resend', methods=['POST'])
+def resend_verification_email():
+    user_id = session.get('pending_verification_user_id')
+    if not user_id:
+        flash('No pending verification found.', 'danger')
+        return redirect(url_for('login'))
+
+    user = User.query.get(user_id)
+    if not user or user.is_verified:
+        return redirect(url_for('login'))
+
+    otp_code = generate_otp()
+    user.verification_otp = otp_code
+    user.verification_otp_expires = datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES)
+    user.verification_attempts = 0
+    db.session.commit()
+
+    if send_verification_email(user.email, otp_code):
+        flash('A new verification code has been sent.', 'success')
+    else:
+        flash('Could not send the email right now. Please try again shortly.', 'danger')
+
+    return redirect(url_for('verify_email'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -167,19 +263,19 @@ def login():
         user = User.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
+            if not user.is_verified:
+                session['pending_verification_user_id'] = user.id
+                flash('Please verify your email before logging in. Check your inbox for the code.', 'warning')
+                return redirect(url_for('verify_email'))
+
             try:
-                sb_auth = supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
-                
-                session.permanent = True
-                login_user(user, remember=False)  
-                return redirect(url_for('home'))
+                supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
             except Exception as sb_err:
-                if "email_not_confirmed" in str(sb_err).lower() or "confirm your email" in str(sb_err).lower():
-                    flash('Please check your email and click the verification link before logging in.', 'warning')
-                else:
-                    session.permanent = True
-                    login_user(user, remember=False)
-                    return redirect(url_for('home'))
+                print(f"Supabase sign_in notice: {str(sb_err)}")
+
+            session.permanent = True
+            login_user(user, remember=False)
+            return redirect(url_for('home'))
         else:
             flash('Invalid username or password.', 'danger')       
             
