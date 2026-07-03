@@ -175,18 +175,25 @@ def forgot_password():
             }
             
             print("--- DEBUG: Attempting to send SMTP email... ---")
-            if send_otp_email(email, generated_otp):
-                print("--- DEBUG: Email sent successfully! ---")
-                flash('A 6-digit verification code has been sent to your email.', 'success')
-                return redirect(url_for('verify_reset_otp'))
-            else:
-                print("--- DEBUG: send_otp_email returned False! ---")
-                flash('Failed to send verification email. Check server configuration.', 'danger')
+            try:
+                email_status = send_otp_email(email, generated_otp)
+                
+                if email_status:
+                    print("--- DEBUG: Email sent successfully! ---")
+                    flash('A 6-digit verification code has been sent to your email.', 'success')
+                    return redirect(url_for('verify_reset_otp'))
+                else:
+                    print("--- DEBUG: send_otp_email returned False! ---")
+                    flash('Failed to send verification email. Check server configuration.', 'danger')
+            except Exception as e:
+                print(f"--- DEBUG: SMTP Mail Error caught safely: {str(e)} ---")
+                flash('Email system timeout. Please verify your SMTP server configuration variables on Render.', 'danger')
         else:
             print("--- DEBUG: User NOT found in the database. ---")
             flash('Account details not found.', 'danger')
             
     return render_template('forgot_password.html', action="Reset")
+
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
 def verify_reset_otp():
