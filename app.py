@@ -3,7 +3,7 @@ import json
 import math
 import random
 import uuid
-import smtplib
+import requests
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
@@ -15,7 +15,6 @@ from pypdf import PdfReader
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
-from email.mime.text import MIMEText
 
 from models import db, User, QuizSession, QuizQuestion 
 
@@ -45,8 +44,8 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS")
-GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL")
 MAIL_FROM_NAME = "QuizPup"
 
 OTP_VALID_MINUTES = 10
@@ -60,23 +59,33 @@ def load_user(user_id):
 #  MAIL UTILITY FUNCTIONS
 # ==========================================
 def send_otp_email(target_email, otp_code):
-    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
-        print("--- ERROR: GMAIL_ADDRESS or GMAIL_APP_PASSWORD environment variable is missing! ---")
+    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
+        print("--- ERROR: BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable is missing! ---")
         return False
 
-    msg = MIMEText(f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>", "html")
-    msg["Subject"] = "Quiz App Verification Code"
-    msg["From"] = f"{MAIL_FROM_NAME} <{GMAIL_ADDRESS}>"
-    msg["To"] = target_email
-
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_ADDRESS, [target_email], msg.as_string())
-        print(f"Gmail SMTP: OTP email sent to {target_email}")
-        return True
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "api-key": BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            json={
+                "sender": {"name": MAIL_FROM_NAME, "email": BREVO_SENDER_EMAIL},
+                "to": [{"email": target_email}],
+                "subject": "Quiz App Verification Code",
+                "htmlContent": f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
+            },
+            timeout=10
+        )
+        if response.status_code in (200, 201):
+            print(f"Brevo API: OTP email sent to {target_email}")
+            return True
+        print(f"Brevo API Error: {response.status_code} {response.text}")
+        return False
     except Exception as e:
-        print(f"Gmail SMTP Error: {str(e)}")
+        print(f"Brevo API Error: {str(e)}")
         return False
 
 # ==========================================
