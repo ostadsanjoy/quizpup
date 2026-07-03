@@ -142,19 +142,16 @@ def login():
         user = User.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
-            # Check Supabase confirmation state to protect against unverified bypass
             try:
                 sb_auth = supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
                 
                 session.permanent = True
-                login_user(user, remember=True)  
+                login_user(user, remember=False)  
                 return redirect(url_for('home'))
             except Exception as sb_err:
-                # If Supabase errors out regarding email verification status
                 if "email_not_confirmed" in str(sb_err).lower() or "confirm your email" in str(sb_err).lower():
                     flash('Please check your email and click the verification link before logging in.', 'warning')
                 else:
-                    # Fallback layer if Supabase credentials desync locally
                     session.permanent = True
                     login_user(user, remember=True)
                     return redirect(url_for('home'))
@@ -169,11 +166,13 @@ def logout():
     logout_user()
     session.clear()
     
-    # Force native Android cache eviction headers to clear persistent views immediately
     response = make_response(redirect(url_for('login')))
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
+    response.delete_cookie('session')
+    response.delete_cookie('remember_token')
+    
     return response
 
 @app.route('/ping', methods=['GET'])
@@ -193,7 +192,6 @@ def forgot_password():
         if user:
             print("--- DEBUG: User found in database! ---")
             generated_otp = str(random.randint(100000, 999999))
-            print(f"========================================\n[DEV TESTING CONSOLE] GENERATED OTP FOR {email} IS: {generated_otp}\n========================================")
             
             session['reset_data'] = {
                 'user_id': user.id,
@@ -201,24 +199,17 @@ def forgot_password():
                 'otp': generated_otp
             }
             
-            print("--- DEBUG: Attempting to send SMTP email... ---")
-            try:
-                email_status = send_otp_email(email, generated_otp)
-                
-                if email_status:
-                    print("--- DEBUG: Email sent successfully! ---")
-                    flash('A 6-digit verification code has been sent to your email.', 'success')
-                else:
-                    print("--- DEBUG: send_otp_email failed but bypassing crash to keep pipeline open ---")
-                    flash('Email sending failed, but you can proceed using the console log OTP payload (Dev Bypass Mode).', 'info')
-                
-                # Fixed: Always redirect to verify page so developers and users aren't locked out
+            print("--- DEBUG: Attempting to send email via Resend API... ---")
+            email_status = send_otp_email(email, generated_otp)
+            
+            if email_status:
+                print("--- DEBUG: Email sent successfully! ---")
+                flash('A 6-digit verification code has been sent to your email.', 'success')
                 return redirect(url_for('verify_reset_otp'))
-                
-            except Exception as e:
-                print(f"--- DEBUG: SMTP Mail Error caught safely: {str(e)} ---")
-                flash('Email system timeout. Proceeding via Dev Bypass Mode. Check server logs.', 'info')
-                return redirect(url_for('verify_reset_otp'))
+            else:
+                print("--- DEBUG: send_otp_email failed. Strictly blocking redirect. ---")
+                session.pop('reset_data', None)
+                flash('Failed to transmit verification email. Please check server configurations.', 'danger')
         else:
             print("--- DEBUG: User NOT found in the database. ---")
             flash('Account details not found.', 'danger')
