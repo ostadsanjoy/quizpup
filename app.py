@@ -54,6 +54,7 @@ def send_otp_email(target_email, otp_code):
     sender_password = os.environ.get("SENDER_PASSWORD")
     
     if not sender_email or not sender_password:
+        print("--- ERROR: SENDER_EMAIL or SENDER_PASSWORD environment variables are missing! ---")
         return False
         
     msg = MIMEText(f"Your Quiz App verification security code is: {otp_code}")
@@ -62,13 +63,12 @@ def send_otp_email(target_email, otp_code):
     msg['To'] = target_email
     
     try:
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=5) as server:
-            server.starttls()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=7) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, target_email, msg.as_string())
         return True
     except Exception as e:
-        print(f"Production SMTP Error: {str(e)}")
+        print(f"Gmail SMTP implicit SSL Error: {str(e)}")
         return False
 
 # ==========================================
