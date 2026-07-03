@@ -3,6 +3,7 @@ import json
 import math
 import random
 import smtplib
+import resend
 from datetime import timedelta
 from dotenv import load_dotenv
 
@@ -42,6 +43,8 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+resend.api_key = os.environ.get("RESEND_API_KEY")
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -50,25 +53,21 @@ def load_user(user_id):
 #  MAIL UTILITY FUNCTIONS
 # ==========================================
 def send_otp_email(target_email, otp_code):
-    sender_email = os.environ.get("SENDER_EMAIL")
-    sender_password = os.environ.get("SENDER_PASSWORD")
-    
-    if not sender_email or not sender_password:
-        print("--- ERROR: SENDER_EMAIL or SENDER_PASSWORD environment variables are missing! ---")
+    if not resend.api_key:
+        print("--- ERROR: RESEND_API_KEY environment variable is missing! ---")
         return False
         
-    msg = MIMEText(f"Your Quiz App verification security code is: {otp_code}")
-    msg['Subject'] = 'Quiz App Verification Code'
-    msg['From'] = sender_email
-    msg['To'] = target_email
-    
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=7) as server:
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, target_email, msg.as_string())
+        response = resend.Emails.send({
+            "from": "QuizPup <onboarding@resend.dev>",
+            "to": target_email,
+            "subject": "Quiz App Verification Code",
+            "html": f"<p>Your Quiz App verification security code is: <strong>{otp_code}</strong></p>"
+        })
+        print(f"Resend success response: {response}")
         return True
     except Exception as e:
-        print(f"Gmail SMTP implicit SSL Error: {str(e)}")
+        print(f"Resend HTTP API Error: {str(e)}")
         return False
 
 # ==========================================
