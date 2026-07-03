@@ -4,14 +4,17 @@
   "webDir": "www",
   "server": {
     "url": "https://quizpup.onrender.com",
-    "cleartext": true
-  }
-},
-"plugins": {
-  "SplashScreen": {
-    "launchShowDuration": 2000,
-    "launchAutoHide": true,
-    "backgroundColor": "#e4923e",
-    "androidScaleType": "CENTER"
+    "cleartext": true,
+    "allowNavigation": [
+      "quizpup.onrender.com"
+    ]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#e4923e",
+      "androidScaleType": "CENTER"
+    }
   }
 }

@@ -26,6 +26,7 @@ if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -127,23 +128,26 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
-        
         if user and check_password_hash(user.password_hash, password):
-            login_user(user, remember=True)
+            session.permanent = True
+            login_user(user, remember=True)  
             return redirect(url_for('home'))
         else:
-            flash('Invalid username or password.')
-            
+            flash('Invalid username or password.', 'danger')       
     return render_template('login.html', action="Login")
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/ping', methods=['GET'])
