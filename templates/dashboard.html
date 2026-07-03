@@ -186,6 +186,13 @@
 
 <script>
     localStorage.setItem('isLoggedIn', 'true');
+    const logoutBtn = document.querySelector('a[href="/logout"]');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('isLoggedIn');
+        });
+    }
+
     function setQCount(val) {
         document.getElementById('custom_q').value = val;
     }
