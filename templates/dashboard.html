@@ -106,6 +106,7 @@
                 class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm">
                 Start Quiz
             </button>
+            <p class="text-[11px] text-center text-slate-400">Larger or harder quizzes can take a minute or two to generate — hang tight, it's working.</p>
         </form>
     </div>
 
@@ -205,11 +206,49 @@
         document.getElementById('quizGenForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('genBtn');
-            btn.disabled = true; btn.innerText = "Generating Questions...";
-            const res = await fetch('/generate-quiz', { method: 'POST', body: new FormData(e.target) });
-            const data = await res.json();
-            if (data.success) { window.location.href = `/quiz/${data.session_id}`; }
-            else { alert("Error: " + data.error); btn.disabled = false; btn.innerText = "Start Quiz"; }
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.classList.add('opacity-90', 'cursor-not-allowed');
+
+            btn.innerHTML = `
+                <span class="inline-flex items-center justify-center gap-2">
+                    <svg class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <span id="genBtnLabel">Generating Questions</span>
+                </span>
+            `;
+
+            const labelEl = document.getElementById('genBtnLabel');
+            const dotFrames = ['', '.', '..', '...'];
+            let dotIndex = 0;
+            const dotTimer = setInterval(() => {
+                dotIndex = (dotIndex + 1) % dotFrames.length;
+                if (labelEl) labelEl.textContent = `Generating Questions${dotFrames[dotIndex]}`;
+            }, 400);
+
+            try {
+                const res = await fetch('/generate-quiz', { method: 'POST', body: new FormData(e.target) });
+                const data = await res.json();
+                if (data.success) {
+                    clearInterval(dotTimer);
+                    if (labelEl) labelEl.textContent = 'Ready! Loading quiz';
+                    window.location.href = `/quiz/${data.session_id}`;
+                } else {
+                    clearInterval(dotTimer);
+                    alert("Error: " + data.error);
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-90', 'cursor-not-allowed');
+                    btn.innerHTML = originalHTML;
+                }
+            } catch (err) {
+                clearInterval(dotTimer);
+                alert("Error: " + err.message);
+                btn.disabled = false;
+                btn.classList.remove('opacity-90', 'cursor-not-allowed');
+                btn.innerHTML = originalHTML;
+            }
         });
     }
 </script>

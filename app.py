@@ -4,6 +4,7 @@ import math
 import random
 import uuid
 import requests
+import concurrent.futures
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
@@ -465,7 +466,6 @@ def generate_quiz():
 
     batch_max = 70
     loops_needed = math.ceil(total_q / batch_max)
-    all_generated_questions = []
 
     quiz_schema = types.Schema(
         type=types.Type.OBJECT,
@@ -491,29 +491,34 @@ def generate_quiz():
         required=["questions"]
     )
 
-    try:
-        for i in range(loops_needed):
-            if i == loops_needed - 1:
-                current_batch_target = total_q - len(all_generated_questions)
-            else:
-                current_batch_target = batch_max
+    def generate_batch(batch_index, current_batch_target):
+        prompt = f"""
+        You are an elite educational testing engine. Generate a comprehensive multiple-choice evaluation quiz strictly based on the provided material.
+        {context_source}
+        
+        Requirements:
+        1. Output exactly {current_batch_target} distinct and unique questions. This is batch chunk {batch_index+1} of {loops_needed}.
+        2. Difficulty setting: {difficulty} ({system_tone}).
+        3. Provide a short, single-sentence indirect hint for each question.
+        4. Provide a clear, maximum 2-sentence conceptual explanation details string.
+        """
 
-            print(f"Executing Batch request iteration {i+1}/{loops_needed} for {current_batch_target} items...")
-
-            prompt = f"""
-            You are an elite educational testing engine. Generate a comprehensive multiple-choice evaluation quiz strictly based on the provided material.
-            {context_source}
-            
-            Requirements:
-            1. Output exactly {current_batch_target} distinct and unique questions. This is batch chunk {i+1} of {loops_needed}.
-            2. Difficulty setting: {difficulty} ({system_tone}).
-            3. Provide a short, single-sentence indirect hint for each question.
-            4. Provide a clear, maximum 2-sentence conceptual explanation details string.
-            """
-
-            try:
+        try:
+            response = ai_client.models.generate_content(
+                model=primary_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=quiz_schema,
+                    temperature=0.4 if difficulty != "god mode" else 0.8
+                )
+            )
+        except Exception as e:
+            if "503" in str(e) or "UNAVAILABLE" in str(e).upper():
+                fallback_model = 'gemini-1.5-flash'
+                print(f"{primary_model} overloaded. Falling back to {fallback_model} for batch {batch_index+1}...")
                 response = ai_client.models.generate_content(
-                    model=primary_model,
+                    model=fallback_model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -521,24 +526,35 @@ def generate_quiz():
                         temperature=0.4 if difficulty != "god mode" else 0.8
                     )
                 )
-            except Exception as e:
-                if "503" in str(e) or "UNAVAILABLE" in str(e).upper():
-                    fallback_model = 'gemini-1.5-flash'
-                    print(f"{primary_model} overloaded. Falling back to {fallback_model} for batch {i+1}...")
-                    response = ai_client.models.generate_content(
-                        model=fallback_model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            response_schema=quiz_schema,
-                            temperature=0.4 if difficulty != "god mode" else 0.8
-                        )
-                    )
-                else:
-                    raise e
+            else:
+                raise e
 
-            batch_data = json.loads(response.text)
-            all_generated_questions.extend(batch_data.get('questions', []))
+        batch_data = json.loads(response.text)
+        return batch_data.get('questions', [])
+
+    try:
+        batch_targets = []
+        remaining = total_q
+        for i in range(loops_needed):
+            current_batch_target = batch_max if i < loops_needed - 1 else remaining
+            batch_targets.append(current_batch_target)
+            remaining -= current_batch_target
+
+        print(f"Executing {loops_needed} batch request(s) concurrently: {batch_targets}")
+
+        results_by_index = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(loops_needed, 5)) as executor:
+            future_to_index = {
+                executor.submit(generate_batch, i, batch_targets[i]): i
+                for i in range(loops_needed)
+            }
+            for future in concurrent.futures.as_completed(future_to_index):
+                idx = future_to_index[future]
+                results_by_index[idx] = future.result()
+
+        all_generated_questions = []
+        for i in range(loops_needed):
+            all_generated_questions.extend(results_by_index[i])
 
         all_generated_questions = all_generated_questions[:total_q]
 
