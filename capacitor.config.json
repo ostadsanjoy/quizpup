@@ -14,7 +14,7 @@
       "launchShowDuration": 2000,
       "launchAutoHide": true,
       "backgroundColor": "#e4923e",
-      "androidScaleType": "CENTER"
+      "androidScaleType": "CENTER_CROP"
     }
   }
 }

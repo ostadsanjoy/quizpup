@@ -60,10 +60,71 @@
             box-sizing: border-box;
             flex-shrink: 0;
         }
+
+        #page-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background-color: #e4923e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.4s ease-out;
+        }
+
+        #page-loader.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #page-loader img {
+            width: 240px;
+            height: 240px;
+            object-fit: contain;
+            animation: loader-bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes loader-bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-14px) scale(1.05); }
+        }
     </style>
 </head>
 
 <body>
+    <div id="page-loader">
+        <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}" alt="Loading">
+    </div>
+
+    <script>
+        (function () {
+            const loader = document.getElementById('page-loader');
+            const storageKey = 'quizpup_starter_loader_shown';
+
+            if (sessionStorage.getItem(storageKey)) {
+                loader.style.display = 'none';
+                return;
+            }
+
+            const minVisibleMs = 700;
+            const maxWaitMs = 4000;
+            const startTime = Date.now();
+
+            function hideLoader() {
+                sessionStorage.setItem(storageKey, 'true');
+                const elapsed = Date.now() - startTime;
+                const remaining = Math.max(0, minVisibleMs - elapsed);
+                setTimeout(() => {
+                    loader.classList.add('fade-out');
+                    setTimeout(() => loader.remove(), 450);
+                }, remaining);
+            }
+
+            window.addEventListener('load', hideLoader);
+            setTimeout(hideLoader, maxWaitMs);
+        })();
+    </script>
     <div class="app-container">
 
         <main class="main-content">
