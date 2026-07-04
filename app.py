@@ -147,7 +147,7 @@ def register():
             phone=phone,
             is_verified=False,
             verification_otp=otp_code,
-            verification_otp_expires=datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES),
+            verification_otp_expires=datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES),
             verification_attempts=0
         )
         db.session.add(new_user)
@@ -204,7 +204,7 @@ def verify_email():
         return redirect(url_for('login'))
 
     if request.method == 'POST':
-        expired = (not user.verification_otp_expires) or datetime.now(timezone.utc) > user.verification_otp_expires
+        expired = (not user.verification_otp_expires) or datetime.utcnow() > user.verification_otp_expires
         if expired:
             flash('Your verification code expired. Please request a new one.', 'danger')
         elif user.verification_attempts >= OTP_MAX_ATTEMPTS:
@@ -241,7 +241,7 @@ def resend_verification_email():
 
     otp_code = generate_otp()
     user.verification_otp = otp_code
-    user.verification_otp_expires = datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES)
+    user.verification_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
     user.verification_attempts = 0
     db.session.commit()
 
