@@ -275,7 +275,7 @@ def login():
                 print(f"Supabase sign_in notice: {str(sb_err)}")
 
             session.permanent = True
-            login_user(user, remember=False)
+            login_user(user, remember=True)
             return redirect(url_for('home'))
         else:
             flash('Invalid username or password.', 'danger')       
