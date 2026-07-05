@@ -8,7 +8,6 @@
     <title>Quiz Platform</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
-        /* Custom palette integration mappings */
         :root {
             --color-primary: #C78283;
             --color-light-bg: #F3D9DC;
@@ -61,69 +60,55 @@
             flex-shrink: 0;
         }
 
-        #page-loader {
+        @font-face {
+            font-family: 'DynaPuff';
+            src: url('/static/fonts/DynaPuff-Bold.ttf') format('truetype');
+            font-weight: 700;
+        }
+
+
+        .splash-screen {
             position: fixed;
             inset: 0;
-            z-index: 9999;
-            background-color: #e4923e;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.4s ease-out;
+            background-color: #e79241;
+            z-index: 9999;
+            animation: splashFadeOut 0.6s ease-out 1.5s forwards;
         }
 
-        #page-loader.fade-out {
-            opacity: 0;
-            pointer-events: none;
+        .splash-logo-text {
+            font-family: 'DynaPuff', sans-serif;
+            font-weight: 700;
+            font-size: 4rem;
+            color: #ffffff;
+            margin: 0;
         }
 
-        #page-loader img {
-            width: 240px;
-            height: 240px;
-            object-fit: contain;
-            animation: loader-bounce 2s ease-in-out infinite;
-        }
+        @keyframes splashFadeOut {
+            from {
+                opacity: 1;
+                visibility: visible;
+            }
 
-        @keyframes loader-bounce {
-            0%, 100% { transform: translateY(0) scale(1); }
-            50% { transform: translateY(-14px) scale(1.05); }
+            to {
+                opacity: 0;
+                visibility: hidden;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div id="page-loader">
-        <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}" alt="Loading">
+    <div id="splash-screen" class="splash-screen">
+        <h1 class="splash-logo-text">QuizPup</h1>
     </div>
 
     <script>
-        (function () {
-            const loader = document.getElementById('page-loader');
-            const storageKey = 'quizpup_starter_loader_shown';
-
-            if (sessionStorage.getItem(storageKey)) {
-                loader.style.display = 'none';
-                return;
-            }
-
-            const minVisibleMs = 1550;
-            const maxWaitMs = 4000;
-            const startTime = Date.now();
-
-            function hideLoader() {
-                sessionStorage.setItem(storageKey, 'true');
-                const elapsed = Date.now() - startTime;
-                const remaining = Math.max(0, minVisibleMs - elapsed);
-                setTimeout(() => {
-                    loader.classList.add('fade-out');
-                    setTimeout(() => loader.remove(), 450);
-                }, remaining);
-            }
-
-            window.addEventListener('load', hideLoader);
-            setTimeout(hideLoader, maxWaitMs);
-        })();
+        document.getElementById('splash-screen').addEventListener('animationend', function () {
+            this.remove();
+        });
     </script>
     <div class="app-container">
 
@@ -133,21 +118,29 @@
 
         {% if current_user.is_authenticated %}
         <nav class="bottom-nav-bar">
-            
+
             <a href="/home" class="flex flex-col items-center transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/home.png') }}" class="h-8 w-8 object-contain {% if view == 'home' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Home">
+                <img src="{{ url_for('static', filename='images/home.png') }}"
+                    class="h-8 w-8 object-contain {% if view == 'home' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
+                    alt="Home">
             </a>
 
             <a href="/new-quiz" class="flex flex-col items-center transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/question.png') }}" class="h-8 w-8 object-contain {% if view == 'new_quiz' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Create Quiz">
+                <img src="{{ url_for('static', filename='images/question.png') }}"
+                    class="h-8 w-8 object-contain {% if view == 'new_quiz' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
+                    alt="Create Quiz">
             </a>
 
             <a href="/account" class="flex flex-col items-center transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/premium.png') }}" class="h-8 w-8 object-contain {% if view == 'account' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Premium Feature">
+                <img src="{{ url_for('static', filename='images/premium.png') }}"
+                    class="h-8 w-8 object-contain {% if view == 'account' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
+                    alt="Premium Feature">
             </a>
 
             <a href="/profile" class="flex flex-col items-center transition transform active:scale-95">
-                <img src="{{ url_for('static', filename='images/user.png') }}" class="h-8 w-8 object-contain {% if view == 'profile' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}" alt="Profile Dashboard">
+                <img src="{{ url_for('static', filename='images/user.png') }}"
+                    class="h-8 w-8 object-contain {% if view == 'profile' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
+                    alt="Profile Dashboard">
             </a>
 
         </nav>
