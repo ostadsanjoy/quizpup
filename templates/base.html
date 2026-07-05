@@ -106,9 +106,17 @@
     </div>
 
     <script>
-        document.getElementById('splash-screen').addEventListener('animationend', function () {
-            this.remove();
-        });
+        (function () {
+            var splash = document.getElementById('splash-screen');
+            if (sessionStorage.getItem('quizpup_splash_shown')) {
+                splash.remove();
+            } else {
+                sessionStorage.setItem('quizpup_splash_shown', 'true');
+                splash.addEventListener('animationend', function () {
+                    this.remove();
+                });
+            }
+        })();
     </script>
     <div class="app-container">
 
