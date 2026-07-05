@@ -8,5 +8,13 @@
     "allowNavigation": [
       "quizpup.onrender.com"
     ]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "launchAutoHide": true,
+      "backgroundColor": "#e79241",
+      "androidScaleType": "CENTER_CROP"
   }
+}
 }
