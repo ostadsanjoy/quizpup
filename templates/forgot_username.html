@@ -4,16 +4,16 @@
 <div style="display: flex; justify-content: center; align-items: center; min-height: 70vh; padding: 20px; font-family: sans-serif;">
     <div style="background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); max-width: 400px; width: 100%; box-sizing: border-box; border: 1px solid #eaeaea;">
         
-        <h2 style="text-align: center; color: #744253; font-weight: bold; margin-bottom: 15px; margin-top: 0;">Recover Account</h2>
+        <h2 style="text-align: center; color: #744253; font-weight: bold; margin-bottom: 15px; margin-top: 0;">Recover Username</h2>
         
         <p style="color: #6c757d; text-align: center; font-size: 14px; line-height: 1.5; margin-bottom: 25px;">
-            Enter your registered email address below, and we will transmit a 6-digit verification security code to authenticate your password recovery session.
+            Forgot your account handle identifier? Enter your registered email address below, and we will look up and transmit your username directly to your inbox.
         </p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 10px; border-radius: 6px; text-align: center; font-size: 13px; margin-bottom: 20px;">
+                    <div style="background-color: {% if category == 'success' %}#d4edda{% else %}#f8d7da{% endif %}; color: {% if category == 'success' %}#155724{% else %}#721c24{% endif %}; border: 1px solid {% if category == 'success' %}#c3e6cb{% else %}#f5c6cb{% endif %}; padding: 10px; border-radius: 6px; text-align: center; font-size: 13px; margin-bottom: 20px;">
                         {{ message }}
                     </div>
                 {% endfor %}
@@ -22,14 +22,14 @@
 
         <form method="POST" style="width: 100%;">
             <div style="margin-bottom: 25px;">
-                <label for="email" style="display: block; font-size: 11px; font-weight: bold; color: #6c757d; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">EMAIL ADDRESS</label>
+                <label for="email" style="display: block; font-size: 11px; font-weight: bold; color: #6c757d; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">REGISTERED EMAIL ADDRESS</label>
                 <input type="email" id="email" name="email" placeholder="name@domain.com" required autocomplete="email"
                        style="display: block; width: 100%; font-size: 15px; padding: 12px; border: 2px solid #ced4da; border-radius: 8px; outline: none; box-sizing: border-box; color: #495057;">
             </div>
-            
+
             <button type="submit" 
                     style="display: block; width: 100%; background-color: #744253; color: #ffffff; font-weight: bold; font-size: 14px; border: none; border-radius: 8px; padding: 14px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; box-sizing: border-box;">
-                SEND RECOVERY CODE
+                FIND MY USERNAME
             </button>
         </form>
 

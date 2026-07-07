@@ -16,39 +16,45 @@
 
 <div class="p-5 space-y-6">
     {% if view == 'home' %}
-    <div class="bg-[#C78283] p-4 rounded-3xl flex justify-between items-center shadow-sm">
-        <h3 class="text-2xl font-serif font-bold text-white pl-2">Past Quizzes</h3>
-        <a href="/new-quiz"
-            class="bg-[#744253] text-white text-xs font-semibold px-4 py-2.5 rounded-full hover:bg-black transition shadow-md">
-            Create New Quiz
-        </a>
-    </div>
-
-    <div class="space-y-4">
-        {% for q in past_quizzes %}
-        <a href="/quiz/{{ q.id }}"
-            class="block bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition shadow-sm group">
-            <div class="space-y-1">
-                <h4 class="font-bold text-[#744253] text-lg group-hover:underline">{{ q.topic }}</h4>
-                <div class="flex gap-4 text-xs font-medium text-[#744253] opacity-80">
-                    <span>Questions: {{ q.total_questions }}</span>
-                    <span>Time: {{ q.duration_minutes }}m</span>
-                </div>
-            </div>
-            <div class="text-right">
-                <span class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
-                <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions }}</span>
-            </div>
-        </a>
-        {% else %}
-        <div class="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-3xl">
-            <p class="text-sm text-slate-400 font-medium">No Quizzes attempted yet.</p>
+    <div id="homeFeedSection" class="space-y-6">
+        <div class="bg-[#C78283] p-4 rounded-3xl flex justify-between items-center shadow-sm">
+            <h3 class="text-2xl font-serif font-bold text-white pl-2">Past Quizzes</h3>
+            <button onclick="switchToQuizForm()"
+                class="bg-[#744253] text-white text-xs font-semibold px-4 py-2.5 rounded-full hover:bg-black transition shadow-md cursor-pointer">
+                Create New Quiz
+            </button>
         </div>
-        {% endfor %}
+
+        <div class="space-y-4">
+            {% for q in past_quizzes %}
+            <a href="/quiz/{{ q.id }}"
+                class="block bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition shadow-sm group">
+                <div class="space-y-1">
+                    <h4 class="font-bold text-[#744253] text-lg group-hover:underline">{{ q.topic }}</h4>
+                    <div class="flex gap-4 text-xs font-medium text-[#744253] opacity-80">
+                        <span>Questions: {{ q.total_questions }}</span>
+                        <span>Time: {{ q.duration_minutes }}m</span>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
+                    <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions }}</span>
+                </div>
+            </a>
+            {% else %}
+            <div class="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-3xl">
+                <p class="text-sm text-slate-400 font-medium">No Quizzes attempted yet.</p>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 
-    {% elif view == 'new_quiz' %}
-    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
+    <div id="quizFormSection" class="hidden bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">⬅ Back to Feed</button>
+            <span class="text-xs uppercase font-mono tracking-widest text-[#B49286] font-bold">Quiz Setup</span>
+        </div>
+        
         <div class="bg-[#C78283] p-3 rounded-2xl">
             <h3 class="text-lg font-bold text-white text-center">Configure Quiz Parameters</h3>
         </div>
@@ -60,18 +66,16 @@
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
 
-            <div
-                class="border-2 border-dashed border-[#B49286] bg-[#F3D9DC]/30 rounded-xl p-4 text-center transition hover:bg-[#F3D9DC]/50">
+            <div class="border-2 border-dashed border-[#B49286] bg-[#F3D9DC]/30 rounded-xl p-4 text-center transition hover:bg-[#F3D9DC]/50">
                 <label class="block text-sm font-bold text-[#744253] cursor-pointer hover:underline">
                     Upload Target PDF Document
-                    <input type="file" name="pdf_file" accept=".pdf" class="hidden">
+                    <input type="file" name="pdf_file" accept=".pdf" class="hidden" id="pdfFileInput">
                 </label>
                 <p id="file-name" class="text-xs text-slate-400 mt-1">No file parsed yet</p>
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Difficulty
-                    Mode</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Difficulty Mode</label>
                 <select name="difficulty"
                     class="w-full border border-[#B49286] bg-white rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                     <option value="easy">Easy</option>
@@ -82,13 +86,11 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Total
-                    Questions</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Total Questions</label>
                 <div class="grid grid-cols-5 gap-1.5 mb-2">
                     {% for count in [10, 20, 30, 50, 100] %}
                     <button type="button" data-count="{{ count }}" onclick="setQCount(this.dataset.count)"
-                        class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition">{{
-                        count }}</button>
+                        class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition shadow-sm">{{ count }}</button>
                     {% endfor %}
                 </div>
                 <input type="number" id="custom_q" name="total_questions" min="10" max="200" value="10"
@@ -96,18 +98,92 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Duration
-                    (Minutes)</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Duration (Minutes)</label>
                 <input type="number" name="duration" min="1" value="15"
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
 
             <button type="submit" id="genBtn"
-                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm">
+                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm cursor-pointer">
                 Start Quiz
             </button>
-            <p class="text-[11px] text-center text-slate-400">Larger or harder quizzes can take a minute or two to generate.</p>
         </form>
+    </div>
+
+    {% elif view == 'flashcards' %}
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-6">
+        <div class="bg-[#C78283] p-4 rounded-2xl text-center">
+            <h3 class="text-xl font-bold text-white font-serif">⚡ AI Flashcard Hub</h3>
+            <p class="text-xs text-white/90 mt-0.5">Test active memory with standard exams or smart prompts</p>
+        </div>
+
+        <div class="space-y-2">
+            <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Preloaded Premium Decks</span>
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="loadSystemDeck('JEE')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🚀 JEE</button>
+                <button onclick="loadSystemDeck('NEET')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🩺 NEET</button>
+                <button onclick="loadSystemDeck('CAT')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">📈 CAT</button>
+            </div>
+        </div>
+
+        <div class="border-t border-slate-100 pt-4 space-y-2">
+            <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Generate from custom topic via AI</label>
+            <div class="flex gap-2">
+                <input type="text" id="fcTopicField" placeholder="e.g., Organic chemistry structural equations..."
+                    class="flex-1 border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                <button onclick="buildAIFlashcards()" id="fcGenBtn" class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer">Build</button>
+            </div>
+        </div>
+
+        <div id="flashcardDisplayStage" class="hidden border-t border-slate-100 pt-4 space-y-4">
+            <div class="deck-view-perspective h-44 w-full cursor-pointer" onclick="this.classList.toggle('card-flipped')">
+                <div class="deck-inner-wrapper relative w-full h-full text-center transition-transform duration-500 transform-style-3d">
+                    <div class="absolute inset-0 bg-[#F3D9DC] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage">
+                        <p id="cardFrontText" class="text-[#744253] font-bold text-sm"></p>
+                    </div>
+                    <div class="absolute inset-0 bg-[#D7BEA8] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage face-rotate-y-180">
+                        <p id="cardBackText" class="text-[#744253] font-medium text-sm"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-between items-center px-2">
+                <button onclick="navigateDeck(-1)" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Previous</button>
+                <span id="deckCounter" class="text-xs font-mono font-bold text-slate-500">0 / 0</span>
+                <button onclick="navigateDeck(1)" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Next</button>
+            </div>
+        </div>
+    </div>
+
+    {% elif view == 'study' %}
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
+        <div class="bg-[#744253] p-4 rounded-2xl text-center">
+            <h3 class="text-xl font-bold text-white font-serif">📝 AI SuperNotes & OCR</h3>
+            <p class="text-xs text-white/90 mt-0.5">Transform photos of handwritten notes into digital summaries</p>
+        </div>
+
+        <form id="studyOcrForm" enctype="multipart/form-data" class="space-y-4">
+            <div class="border-2 border-dashed border-[#B49286] bg-[#FFFBFB] rounded-xl p-6 text-center transition hover:bg-slate-50">
+                <label class="block text-sm font-bold text-[#744253] cursor-pointer hover:underline">
+                    Capture or Upload Handwritten Pages
+                    <input type="file" name="note_file" id="note_file_input" accept="image/*,.pdf" class="hidden">
+                </label>
+                <p id="note-file-name" class="text-xs text-slate-400 mt-1">No images parsed yet</p>
+            </div>
+            <button type="submit" id="studyBtn" class="w-full bg-[#C78283] hover:bg-black text-white font-bold py-3.5 rounded-xl transition text-sm shadow-md cursor-pointer">
+                Process Note Streams
+            </button>
+        </form>
+
+        <div id="ocrOutputContainer" class="hidden space-y-4 pt-4 border-t border-slate-100">
+            <div>
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">📖 Digitized Core Text (OCR)</span>
+                <textarea id="rawOcrResult" readonly class="w-full h-32 text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-700 focus:outline-none"></textarea>
+            </div>
+            <div>
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">⚡ SuperNotes One-Pager Summary</span>
+                <div id="formattedSummaryResult" class="prose max-w-none text-xs p-4 bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl text-slate-800 leading-relaxed space-y-2"></div>
+            </div>
+        </div>
     </div>
 
     {% elif view == 'account' %}
@@ -185,6 +261,14 @@
     {% endif %}
 </div>
 
+<style>
+    .deck-view-perspective { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+    .backface-hidden-stage { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .face-rotate-y-180 { transform: rotateY(180deg); }
+    .card-flipped .deck-inner-wrapper { transform: rotateY(180deg); }
+</style>
+
 <script>
     localStorage.setItem('isLoggedIn', 'true');
     const logoutBtn = document.querySelector('a[href="/logout"]');
@@ -194,14 +278,134 @@
         });
     }
 
+    function switchToQuizForm() {
+        document.getElementById('homeFeedSection').classList.add('hidden');
+        document.getElementById('quizFormSection').classList.remove('hidden');
+    }
+
+    function switchToFeed() {
+        document.getElementById('quizFormSection').classList.add('hidden');
+        document.getElementById('homeFeedSection').classList.remove('hidden');
+    }
+
     function setQCount(val) {
         document.getElementById('custom_q').value = val;
     }
-    if (document.querySelector('input[name="pdf_file"]')) {
-        document.querySelector('input[name="pdf_file"]').addEventListener('change', e => {
+
+    const fileInputObj = document.getElementById('pdfFileInput');
+    if (fileInputObj) {
+        fileInputObj.addEventListener('change', e => {
             document.getElementById('file-name').innerText = e.target.files[0]?.name || "No file parsed yet";
         });
     }
+
+    let localDeckStore = [];
+    let currentCardCursor = 0;
+
+    function renderStageCard() {
+        if(!localDeckStore.length) return;
+        document.querySelector('.deck-view-perspective').classList.remove('card-flipped');
+        document.getElementById('cardFrontText').innerText = localDeckStore[currentCardCursor].question;
+        document.getElementById('cardBackText').innerText = localDeckStore[currentCardCursor].answer;
+        document.getElementById('deckCounter').innerText = `${currentCardCursor + 1} / ${localDeckStore.length}`;
+    }
+
+    function navigateDeck(dir) {
+        if(!localDeckStore.length) return;
+        currentCardCursor += dir;
+        if(currentCardCursor < 0) currentCardCursor = localDeckStore.length - 1;
+        if(currentCardCursor >= localDeckStore.length) currentCardCursor = 0;
+        renderStageCard();
+    }
+
+    async function loadSystemDeck(examKey) {
+        try {
+            const response = await fetch(`/api/flashcards/preload?exam=${examKey}`);
+            const payload = await response.json();
+            if(payload.success) {
+                localDeckStore = payload.deck;
+                currentCardCursor = 0;
+                document.getElementById('flashcardDisplayStage').classList.remove('hidden');
+                renderStageCard();
+            }
+        } catch(e) {
+            alert("Error trying to process preloaded assets.");
+        }
+    }
+
+    async function buildAIFlashcards() {
+        const inputField = document.getElementById('fcTopicField');
+        const targetBtn = document.getElementById('fcGenBtn');
+        if(!inputField.value.trim()) return alert("Please clarify a target study topic prompt.");
+
+        const savedText = targetBtn.innerText;
+        targetBtn.disabled = true;
+        targetBtn.innerText = "⏳";
+
+        try {
+            const res = await fetch('/api/flashcards/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic: inputField.value })
+            });
+            const out = await res.json();
+            if(out.success) {
+                localDeckStore = out.deck;
+                currentCardCursor = 0;
+                document.getElementById('flashcardDisplayStage').classList.remove('hidden');
+                renderStageCard();
+            } else {
+                alert("AI Engine response failure: " + out.error);
+            }
+        } catch(err) {
+            alert("Network connectivity timeout reading generative flashcard values.");
+        } finally {
+            targetBtn.disabled = false;
+            targetBtn.innerText = savedText;
+        }
+    }
+
+    const targetNoteInput = document.getElementById('note_file_input');
+    if(targetNoteInput) {
+        targetNoteInput.addEventListener('change', e => {
+            document.getElementById('note-file-name').innerText = e.target.files[0]?.name || "No images parsed yet";
+        });
+    }
+
+    const noteSubmissionForm = document.getElementById('studyOcrForm');
+    if(noteSubmissionForm) {
+        noteSubmissionForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            const referenceInput = document.getElementById('note_file_input');
+            if(!referenceInput.files.length) return alert("Please upload notes files/photos.");
+
+            const actionBtn = document.getElementById('studyBtn');
+            const nativeHTML = actionBtn.innerHTML;
+            actionBtn.disabled = true;
+            actionBtn.innerText = "Processing handwritten notes via Multi-Modal Vision API...";
+
+            const activeData = new FormData();
+            activeData.append('note_file', referenceInput.files[0]);
+
+            try {
+                const response = await fetch('/api/study/process-notes', { method: 'POST', body: activeData });
+                const jsonResult = await response.json();
+                if(jsonResult.success) {
+                    document.getElementById('rawOcrResult').value = jsonResult.digitized_text;
+                    document.getElementById('formattedSummaryResult').innerHTML = jsonResult.summary;
+                    document.getElementById('ocrOutputContainer').classList.remove('hidden');
+                } else {
+                    alert("Analysis Failed: " + jsonResult.error);
+                }
+            } catch(ex) {
+                alert("Server execution failure: " + ex.message);
+            } finally {
+                actionBtn.disabled = false;
+                actionBtn.innerHTML = nativeHTML;
+            }
+        });
+    }
+
     if (document.getElementById('quizGenForm')) {
         document.getElementById('quizGenForm').addEventListener('submit', async (e) => {
             e.preventDefault();

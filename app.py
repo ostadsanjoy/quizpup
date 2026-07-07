@@ -4,6 +4,7 @@ import math
 import random
 import uuid
 import requests
+import base64
 import concurrent.futures
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from pypdf import PdfReader
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
+from flashcard_data import PRELOADED_DECKS
 
 from models import db, User, QuizSession, QuizQuestion 
 
@@ -37,7 +39,6 @@ db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# Global key configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_ACTUAL_GEMINI_API_KEY_HERE")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -52,13 +53,28 @@ MAIL_FROM_NAME = "QuizPup"
 OTP_VALID_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
 
+PRELOADED_DECKS = {
+    "JEE": [
+        {"question": "What is the hybridisation of Cl in ClO4-?", "answer": "sp3 hybridisation"},
+        {"question": "State the conditions required for Rolle's Theorem on interval [a,b].", "answer": "f(x) must be continuous on [a,b], differentiable on open (a,b), and f(a) = f(b)."},
+        {"question": "Evaluate value of Integral dx/(1+x^2) bounded from 0 to 1.", "answer": "pi / 4"}
+    ],
+    "NEET": [
+        {"question": "Where exactly does the Krebs cycle take place in eukaryotic cellular geometry?", "answer": "Within the internal mitochondrial matrix space."},
+        {"question": "What is the primary physiological function of interstitial Leydig cells?", "answer": "Synthesis and secretion of testicular androgen hormones (testosterone)."},
+        {"question": "Which specific adenohypophyseal hormone triggers immediate ovulation cycles?", "answer": "Luteinizing Hormone (LH surge)."}
+    ],
+    "CAT": [
+        {"question": "What is the combinations equation to distribute n items containing p identical entities?", "answer": "Total paths = n! / p!"},
+        {"question": "Solve for base element x constraints if: log_2(x) + log_4(x) = 6.", "answer": "Calculated value x = 16"},
+        {"question": "Define a structural network bottleneck inside Data Interpretation resource pathways.", "answer": "A localized point or node constraint that defines the absolute peak capacity flow of the complete graph map."}
+    ]
+}
+
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
-# ==========================================
-#  MAIL UTILITY FUNCTIONS
-# ==========================================
 def send_email(target_email, subject, html_body):
     if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
         print("--- ERROR: BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable is missing! ---")
@@ -81,12 +97,9 @@ def send_email(target_email, subject, html_body):
             timeout=10
         )
         if response.status_code in (200, 201):
-            print(f"Brevo API: email sent to {target_email}")
             return True
-        print(f"Brevo API Error: {response.status_code} {response.text}")
         return False
-    except Exception as e:
-        print(f"Brevo API Error: {str(e)}")
+    except Exception:
         return False
 
 def send_otp_email(target_email, otp_code):
@@ -106,10 +119,6 @@ def send_verification_email(target_email, otp_code):
 
 def generate_otp():
     return str(random.randint(100000, 999999))
-
-# ==========================================
-#          AUTHENTICATION ROUTES
-# ==========================================
 
 @app.route('/')
 def index():
@@ -193,7 +202,7 @@ def verify_email():
         flash('No pending verification found. Please register or log in.', 'danger')
         return redirect(url_for('login'))
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         session.pop('pending_verification_user_id', None)
         flash('Account not found.', 'danger')
@@ -236,7 +245,7 @@ def resend_verification_email():
         flash('No pending verification found.', 'danger')
         return redirect(url_for('login'))
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or user.is_verified:
         return redirect(url_for('login'))
 
@@ -297,88 +306,79 @@ def logout():
     
     return response
 
-@app.route('/ping', methods=['GET'])
-def ping_server():
-    return jsonify({"status": "healthy", "message": "Stay awake, pup!"}), 200
+# ==========================================
+#          PASSWORD RECOVERY ROUTES
+# ==========================================
+
+@app.route('/forgot-username', methods=['GET', 'POST'])
+def forgot_username():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        user = User.query.filter_by(email=email).first()
+        
+        if user:
+            send_email(
+                email,
+                "Your QuizPup Username Reminder",
+                f"<p>Hello,</p><p>You requested a username reminder. Your account username identifier is: <strong>{user.username}</strong></p><p>Have a great study session!</p>"
+            )
+            flash('Username reminder message successfully dispatched to your email address.', 'success')
+        else:
+            flash(f'No accounts related to {email}', 'danger')
+            
+    return render_template('forgot_username.html')
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
-        username = request.form.get('username')
         email = request.form.get('email')
-        new_password = request.form.get('new_password')
-        print(f"--- DEBUG: Trying reset for Username: {username}, Email: {email} ---")
-        
-        user = User.query.filter_by(username=username, email=email).first()
+        user = User.query.filter_by(email=email).first()
         
         if user:
-            print("--- DEBUG: User found in database! ---")
-            generated_otp = str(random.randint(100000, 999999))
+            otp_code = generate_otp()
+            user.verification_otp = otp_code
+            user.verification_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
+            db.session.commit()
             
-            session['reset_data'] = {
-                'user_id': user.id,
-                'new_password_hash': generate_password_hash(new_password, method='scrypt'),
-                'otp': generated_otp,
-                'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=OTP_VALID_MINUTES)).isoformat(),
-                'attempts': 0
-            }
-            
-            print("--- DEBUG: Attempting to send email via Resend API... ---")
-            email_status = send_otp_email(email, generated_otp)
-            
-            if email_status:
-                print("--- DEBUG: Email sent successfully! ---")
-                flash('A 6-digit verification code has been sent to your email.', 'success')
-                return redirect(url_for('verify_reset_otp'))
-            else:
-                print("--- DEBUG: send_otp_email failed. Strictly blocking redirect. ---")
-                session.pop('reset_data', None)
-                flash('Failed to transmit verification email. Please check server configurations.', 'danger')
+            send_otp_email(email, otp_code)
+            session['reset_password_email'] = email
+            flash('A verification recovery code has been sent to your email address.', 'success')
+            return redirect(url_for('verify_otp'))
         else:
-            print("--- DEBUG: User NOT found in the database. ---")
-            flash('Account details not found.', 'danger')
+            flash('No active account found containing this email address.', 'danger')
             
-    return render_template('forgot_password.html', action="Reset")
+    return render_template('forgot_password.html')
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
-def verify_reset_otp():
-    reset_data = session.get('reset_data')
-    if not reset_data:
-        flash('No password reset session active.', 'danger')
+def verify_otp():
+    email = session.get('reset_password_email')
+    if not email:
         return redirect(url_for('forgot_password'))
-
+        
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return redirect(url_for('forgot_password'))
+        
     if request.method == 'POST':
-        expires_at = datetime.fromisoformat(reset_data['expires_at'])
-        if datetime.now(timezone.utc) > expires_at:
-            session.pop('reset_data', None)
-            flash('Your verification code expired. Please request a new one.', 'danger')
-            return redirect(url_for('forgot_password'))
-
-        if reset_data.get('attempts', 0) >= OTP_MAX_ATTEMPTS:
-            session.pop('reset_data', None)
-            flash('Too many incorrect attempts. Please request a new code.', 'danger')
-            return redirect(url_for('forgot_password'))
-
-        user_otp = request.form.get('otp')
-        if user_otp == reset_data['otp']:
-            user = User.query.get(reset_data['user_id'])
-            if user:
-                user.password_hash = reset_data['new_password_hash']
-                db.session.commit()
-                session.pop('reset_data', None)
-                
-                flash('Password updated successfully! Please log in.', 'success')
-                return redirect(url_for('login'))
-            else:
-                flash('User account no longer found.', 'danger')
-                return redirect(url_for('forgot_password'))
+        submitted_otp = request.form.get('otp')
+        new_password = request.form.get('new_password')
+        
+        if not submitted_otp or not new_password:
+            flash('Both the verification code and chosen password fields are required.', 'danger')
+            return render_template('verify_otp.html', email=email)
+        
+        if submitted_otp == user.verification_otp:
+            user.password_hash = generate_password_hash(new_password, method='scrypt')
+            user.verification_otp = None
+            db.session.commit()
+            
+            session.pop('reset_password_email', None)
+            flash('Your account security password has been updated successfully. Please login.', 'success')
+            return redirect(url_for('login'))
         else:
-            reset_data['attempts'] = reset_data.get('attempts', 0) + 1
-            session['reset_data'] = reset_data
-            remaining = OTP_MAX_ATTEMPTS - reset_data['attempts']
-            flash(f'Invalid verification code. {remaining} attempt(s) remaining.', 'danger')
-
-    return render_template('verify_otp.html')
+            flash('Invalid or active recovery code token mismatch.', 'danger')
+            
+    return render_template('verify_otp.html', email=email)
 
 # ==========================================
 #       WIREFRAME DASHBOARD PANELS
@@ -390,10 +390,15 @@ def home():
     past_quizzes = QuizSession.query.filter_by(user_id=current_user.id).order_by(QuizSession.created_at.desc()).all()
     return render_template('dashboard.html', past_quizzes=past_quizzes, view="home")
 
-@app.route('/new-quiz')
+@app.route('/flashcards')
 @login_required
-def new_quiz_view():
-    return render_template('dashboard.html', view="new_quiz")
+def flashcards_view():
+    return render_template('dashboard.html', view="flashcards")
+
+@app.route('/study')
+@login_required
+def study_view():
+    return render_template('dashboard.html', view="study")
 
 @app.route('/account')
 @login_required
@@ -411,11 +416,144 @@ def edit_profile():
     current_user.first_name = request.form.get('first_name')
     current_user.last_name = request.form.get('last_name')
     current_user.phone = request.form.get('phone')
-    if request.form.get('email'):
-        current_user.email = request.form.get('email')
     db.session.commit()
-    flash('Profile updated successfully!')
     return redirect(url_for('profile'))
+
+# ==========================================
+#        NEW FLASHCARD & STUDY ASYNC APIs
+# ==========================================
+
+@app.route('/api/flashcards/preload', methods=['GET'])
+@login_required
+def preload_flashcards():
+    exam_target = request.args.get('exam', 'JEE').upper()
+    exam_deck = PRELOADED_DECKS.get(exam_target, [])
+    
+    return jsonify({"success": True, "deck": exam_deck})
+
+@app.route('/api/flashcards/generate', methods=['POST'])
+@login_required
+def generate_ai_flashcards():
+    data = request.get_json() or {}
+    topic = data.get('topic', '')
+    if not topic:
+        return jsonify({"success": False, "error": "Topic argument is completely missing."}), 400
+
+    fc_schema = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "cards": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "question": types.Schema(type=types.Type.STRING),
+                        "answer": types.Schema(type=types.Type.STRING)
+                    },
+                    required=["question", "answer"]
+                )
+            )
+        },
+        required=["cards"]
+    )
+
+    prompt = f"Create exactly 5 revision flashcards matching the core parameter topic context: '{topic}'. Keep answers concise."
+    try:
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=fc_schema,
+                temperature=0.5
+            )
+        )
+        res_data = json.loads(response.text)
+        return jsonify({"success": True, "deck": res_data.get('cards', [])})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/study/process-notes', methods=['POST'])
+@login_required
+def process_study_notes():
+    if 'note_file' not in request.files:
+        return jsonify({"success": False, "error": "Payload key mismatch."}), 400
+    
+    file = request.files['note_file']
+    if file.filename == '':
+        return jsonify({"success": False, "error": "Empty filename."}), 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{filename}")
+    file.save(filepath)
+
+    extracted_text = ""
+    is_pdf = filename.lower().endswith('.pdf')
+
+    try:
+        if is_pdf:
+            reader = PdfReader(filepath)
+            for page in reader.pages:
+                extracted_text += page.extract_text() or ""
+            
+            if not extracted_text.strip():
+                with open(filepath, 'rb') as f:
+                    pdf_bytes = f.read()
+                
+                # Encode using standard google-genai dictionary syntax structure
+                b64_data = base64.b64encode(pdf_bytes).decode('utf-8')
+                ocr_prompt = "Perform accurate OCR transcription on these scanned handwritten note pages."
+                response = ai_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[
+                        {"type": "document", "data": b64_data, "mime_type": "application/pdf"},
+                        {"type": "text", "text": ocr_prompt}
+                    ]
+                )
+                extracted_text = response.text
+        else:
+            with open(filepath, 'rb') as f:
+                img_bytes = f.read()
+            
+            b64_data = base64.b64encode(img_bytes).decode('utf-8')
+            ocr_prompt = "Perform full digital text transcription from this photographic note document."
+            response = ai_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[
+                    {"type": "image", "data": b64_data, "mime_type": file.content_type},
+                    {"type": "text", "text": ocr_prompt}
+                ]
+            )
+            extracted_text = response.text
+
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        summary_prompt = f"""
+        Analyze the following transcribed document text block carefully:
+        {extracted_text}
+        
+        Generate a concise One-Pager SuperNote summary. Render clean structural output lines.
+        Wrap important concepts or terms inside <strong> elements and format list hierarchies inside <ul><li> structures.
+        Do not use markdown symbols like #, ##, or **.
+        """
+        summary_res = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=summary_prompt
+        )
+
+        db.session.expunge_all()
+
+        return jsonify({
+            "success": True, 
+            "digitized_text": extracted_text.strip() or "No raw text segments discovered.", 
+            "summary": summary_res.text
+        })
+    except Exception as e:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        db.session.expunge_all()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ==========================================
 #          CORE ENGINE & AI LOGIC
@@ -454,15 +592,8 @@ def generate_quiz():
         hints_allowed = 0
 
     system_tone = "highly complex, rigorous, and university-level" if difficulty == "god mode" else "standard academic evaluation"
-    
-    if source_text:
-        primary_model = 'gemini-2.5-flash'
-        context_source = f"Text Source Material Context: {source_text[:40000]}"
-        print(f"Routing session to Heavy Engine ({primary_model}) due to PDF attachment.")
-    else:
-        primary_model = 'gemini-3.1-flash-lite'
-        context_source = f"Topic: {topic}"
-        print(f"Routing session to High-RPD Engine ({primary_model}) for standard topic generation.")
+    primary_model = 'gemini-2.5-flash'
+    context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
     batch_max = 70
     loops_needed = math.ceil(total_q / batch_max)
@@ -502,33 +633,15 @@ def generate_quiz():
         3. Provide a short, single-sentence indirect hint for each question.
         4. Provide a clear, maximum 2-sentence conceptual explanation details string.
         """
-
-        try:
-            response = ai_client.models.generate_content(
-                model=primary_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=quiz_schema,
-                    temperature=0.4 if difficulty != "god mode" else 0.8
-                )
+        response = ai_client.models.generate_content(
+            model=primary_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=quiz_schema,
+                temperature=0.4 if difficulty != "god mode" else 0.8
             )
-        except Exception as e:
-            if "503" in str(e) or "UNAVAILABLE" in str(e).upper():
-                fallback_model = 'gemini-1.5-flash'
-                print(f"{primary_model} overloaded. Falling back to {fallback_model} for batch {batch_index+1}...")
-                response = ai_client.models.generate_content(
-                    model=fallback_model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=quiz_schema,
-                        temperature=0.4 if difficulty != "god mode" else 0.8
-                    )
-                )
-            else:
-                raise e
-
+        )
         batch_data = json.loads(response.text)
         return batch_data.get('questions', [])
 
@@ -539,8 +652,6 @@ def generate_quiz():
             current_batch_target = batch_max if i < loops_needed - 1 else remaining
             batch_targets.append(current_batch_target)
             remaining -= current_batch_target
-
-        print(f"Executing {loops_needed} batch request(s) concurrently: {batch_targets}")
 
         results_by_index = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(loops_needed, 5)) as executor:
@@ -585,10 +696,8 @@ def generate_quiz():
         db.session.commit()
 
         return jsonify({"success": True, "session_id": quiz_session_instance.id})
-        
     except Exception as e:
-        return jsonify({"error": f"Framework Processing Failure: {str(e)}"}), 500
-
+        return jsonify({"error": f"Framework Failure: {str(e)}"}), 500
 
 # ==========================================
 #          RUNNING EXAMINATION INTERFACE
@@ -623,10 +732,7 @@ def get_quiz_questions(session_id):
     if session_instance.is_completed:
         for q in session_instance.questions:
             saved_answers_map[q.id] = q.user_answer
-            explanations_map[q.id] = {
-                "correct": q.correct_option,
-                "explanation": q.explanation
-            }
+            explanations_map[q.id] = {"correct": q.correct_option, "explanation": q.explanation}
             
     return jsonify({
         "duration": session_instance.duration_minutes,
@@ -641,87 +747,28 @@ def get_quiz_questions(session_id):
         "explanations": explanations_map
     })
 
-@app.route('/api/quiz/<int:session_id>/hint/<int:question_id>', methods=['POST'])
-@login_required
-def fetch_hint(session_id, question_id):
-    session_instance = QuizSession.query.get_or_404(session_id)
-    if session_instance.user_id != current_user.id:
-        return jsonify({"error": "Not authorized"}), 403
-    question = QuizQuestion.query.get_or_404(question_id)
-    if question.session_id != session_instance.id:
-        return jsonify({"error": "Not authorized"}), 403
-    
-    if session_instance.difficulty in ['hard', 'god mode']:
-        return jsonify({"error": f"Hints are completely locked under {session_instance.difficulty} mode constraints."}), 403
-        
-    if session_instance.difficulty == 'medium':
-        if session_instance.hints_remaining <= 0:
-            return jsonify({"error": "No hint allocations remaining for this session."}), 403
-        session_instance.hints_remaining -= 1
-        db.session.commit()
-        
-    return jsonify({"hint": question.hint, "hints_remaining": session_instance.hints_remaining})
-
 @app.route('/api/quiz/<int:session_id>/submit', methods=['POST'])
 @login_required
 def submit_quiz(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
     if session_instance.user_id != current_user.id:
         return jsonify({"error": "Not authorized"}), 403
-    if session_instance.is_completed:
-        return jsonify({"error": "Session execution loop already completed."}), 400
         
     data = request.json.get('answers', {})
     score = 0
-    wrong_context = []
-    explanations_map = {}
-
     for q in session_instance.questions:
         user_ans = data.get(str(q.id))
         user_ans_int = int(user_ans) if user_ans is not None else None
         q.user_answer = user_ans_int
-        
         if user_ans_int == q.correct_option:
             score += 1
-        else:
-            wrong_context.append({
-                "question": q.question_text, 
-                "missed_answer_index": user_ans_int, 
-                "actual_correct_index": q.correct_option
-            })
-            
-        explanations_map[q.id] = {
-            "correct": q.correct_option,
-            "explanation": q.explanation
-        }
             
     session_instance.score = score
     session_instance.is_completed = True
-    
-    recommendation = "Incredible work! No visible lagging gaps discovered across the evaluated topic framework criteria."
-    if wrong_context:
-        rec_prompt = f"""
-        A student completed a comprehensive exam focusing on domain topic matrix: '{session_instance.topic}'.
-        They missed the following evaluation conceptual targets:
-        {json.dumps(wrong_context[:12])}
-        
-        Generate a constructive, personalized 2-3 sentence lagging evaluation critique summary pointing out exactly what sub-thematic focus point they are struggling with and where they must study next.
-        """
-        try:
-            rec_response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=rec_prompt)
-            recommendation = rec_response.text
-        except:
-            recommendation = "Review missed baseline index properties to fortify foundational structural execution parameters."
-
-    session_instance.recommendation = recommendation
+    session_instance.recommendation = "Review completed targets to fortify foundational metrics."
     db.session.commit()
     
-    return jsonify({
-        "score": score,
-        "total": session_instance.total_questions,
-        "recommendation": recommendation,
-        "explanations": explanations_map
-    })
+    return jsonify({"score": score, "total": session_instance.total_questions, "recommendation": session_instance.recommendation})
 
 with app.app_context():
     db.create_all()

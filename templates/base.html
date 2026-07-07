@@ -51,7 +51,7 @@
             width: 100%;
             height: 80px;
             background-color: #D7BEA8;
-            border-top: 1px solid #849286;
+            border-top: 1px solid #B49286;
             display: flex;
             justify-content: space-around;
             align-items: center;
@@ -133,10 +133,16 @@
                     alt="Home">
             </a>
 
-            <a href="/new-quiz" class="flex flex-col items-center transition transform active:scale-95">
+            <a href="/flashcards" class="flex flex-col items-center transition transform active:scale-95">
                 <img src="{{ url_for('static', filename='images/question.png') }}"
-                    class="h-8 w-8 object-contain {% if view == 'new_quiz' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
-                    alt="Create Quiz">
+                    class="h-8 w-8 object-contain {% if view == 'flashcards' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
+                    alt="AI Flashcards">
+            </a>
+
+            <a href="/study" class="flex flex-col items-center transition transform active:scale-95">
+                <img src="{{ url_for('static', filename='images/study.png') }}"
+                    class="h-8 w-8 object-contain {% if view == 'study' %} filter invert-[20%] sepia-[30%] saturate-[1000%] hue-rotate-[310deg] {% endif %}"
+                    alt="AI Notes and Supernotes">
             </a>
 
             <a href="/account" class="flex flex-col items-center transition transform active:scale-95">

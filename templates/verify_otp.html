@@ -4,10 +4,10 @@
 <div style="display: flex; justify-content: center; align-items: center; min-height: 70vh; padding: 20px; font-family: sans-serif;">
     <div style="background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); max-width: 400px; width: 100%; box-sizing: border-box; border: 1px solid #eaeaea;">
         
-        <h2 style="text-align: center; color: #6f42c1; font-weight: bold; margin-bottom: 15px; margin-top: 0;">Verify Security Code</h2>
+        <h2 style="text-align: center; color: #744253; font-weight: bold; margin-bottom: 15px; margin-top: 0;">Verify Security Code</h2>
         
         <p style="color: #6c757d; text-align: center; font-size: 14px; line-height: 1.5; margin-bottom: 25px;">
-            We have sent a 6-digit verification code to your registered email address. Please enter it below to confirm your password reset.
+            We have sent a 6-digit verification code to your registered email address. Please enter the code along with your new password below.
         </p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -21,14 +21,20 @@
         {% endwith %}
 
         <form method="POST" style="width: 100%;">
-            <div style="margin-bottom: 25px; text-align: center;">
+            <div style="margin-bottom: 20px; text-align: center;">
                 <label for="otp" style="display: block; font-size: 11px; font-weight: bold; color: #6c757d; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">6-DIGIT OTP CODE</label>
                 <input type="text" id="otp" name="otp" placeholder="000000" maxlength="6" pattern="\d{6}" required autocomplete="off" 
                        style="display: block; width: 80%; margin: 0 auto; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 6px; padding: 10px; border: 2px solid #ced4da; border-radius: 8px; outline: none; box-sizing: border-box; color: #495057;">
             </div>
+
+            <div style="margin-bottom: 25px;">
+                <label for="new_password" style="display: block; font-size: 11px; font-weight: bold; color: #6c757d; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">CHOOSE NEW PASSWORD</label>
+                <input type="password" id="new_password" name="new_password" placeholder="••••••••" required autocomplete="new-password"
+                       style="display: block; width: 100%; font-size: 15px; padding: 12px; border: 2px solid #ced4da; border-radius: 8px; outline: none; box-sizing: border-box; color: #495057;">
+            </div>
             
             <button type="submit" 
-                    style="display: block; width: 100%; background-color: #6a4a55; color: #ffffff; font-weight: bold; font-size: 14px; border: none; border-radius: 8px; padding: 14px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; box-sizing: border-box;">
+                    style="display: block; width: 100%; background-color: #744253; color: #ffffff; font-weight: bold; font-size: 14px; border: none; border-radius: 8px; padding: 14px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; box-sizing: border-box;">
                 VERIFY & UPDATE PASSWORD
             </button>
         </form>
