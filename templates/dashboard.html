@@ -117,25 +117,44 @@
             <p class="text-xs text-white/90 mt-0.5">Test active memory with standard exams or smart prompts</p>
         </div>
 
-        <div class="space-y-2">
-            <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Preloaded Premium Decks</span>
-            <div class="grid grid-cols-3 gap-2">
-                <button onclick="loadSystemDeck('JEE')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🚀 JEE</button>
-                <button onclick="loadSystemDeck('NEET')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🩺 NEET</button>
-                <button onclick="loadSystemDeck('CAT')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">📈 CAT</button>
+        <!-- STAGE 1: Home - exam decks + AI topic generator -->
+        <div id="fcHomeStage" class="space-y-6">
+            <div class="space-y-2">
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Preloaded Premium Decks</span>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="openExam('JEE')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🚀 JEE</button>
+                    <button onclick="openExam('NEET')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🩺 NEET</button>
+                    <button onclick="openExam('CAT')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">📈 CAT</button>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-100 pt-4 space-y-2">
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Generate from custom topic via AI</label>
+                <div class="flex gap-2">
+                    <input type="text" id="fcTopicField" placeholder="e.g., Organic chemistry structural equations..."
+                        class="flex-1 border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                    <button onclick="buildAIFlashcards()" id="fcGenBtn" class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer">Build</button>
+                </div>
             </div>
         </div>
 
-        <div class="border-t border-slate-100 pt-4 space-y-2">
-            <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Generate from custom topic via AI</label>
-            <div class="flex gap-2">
-                <input type="text" id="fcTopicField" placeholder="e.g., Organic chemistry structural equations..."
-                    class="flex-1 border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
-                <button onclick="buildAIFlashcards()" id="fcGenBtn" class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer">Build</button>
+        <!-- STAGE 2: Subject / Chapter picker -->
+        <div id="fcPickerStage" class="hidden space-y-3">
+            <div class="flex items-center justify-between">
+                <button onclick="fcPickerBack()" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">← Back</button>
+                <span id="fcPickerTitle" class="text-sm font-bold text-[#744253]"></span>
+                <span class="w-14"></span>
             </div>
+            <div id="fcPickerList" class="grid grid-cols-1 gap-2"></div>
         </div>
 
-        <div id="flashcardDisplayStage" class="hidden border-t border-slate-100 pt-4 space-y-4">
+        <!-- STAGE 3: Flashcard viewer -->
+        <div id="flashcardDisplayStage" class="hidden space-y-4">
+            <div class="flex items-center justify-between">
+                <button onclick="fcBackToChapters()" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">← Back</button>
+                <span id="fcActiveChapterLabel" class="text-sm font-bold text-[#744253]"></span>
+                <span class="w-14"></span>
+            </div>
             <div class="deck-view-perspective h-44 w-full cursor-pointer" onclick="this.classList.toggle('card-flipped')">
                 <div class="deck-inner-wrapper relative w-full h-full text-center transition-transform duration-500 transform-style-3d">
                     <div class="absolute inset-0 bg-[#F3D9DC] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage">
@@ -172,6 +191,7 @@
             <button type="submit" id="studyBtn" class="w-full bg-[#C78283] hover:bg-black text-white font-bold py-3.5 rounded-xl transition text-sm shadow-md cursor-pointer">
                 Process Note Streams
             </button>
+            <p id="studyStatusMsg" class="hidden text-xs text-center text-[#744253] font-medium"></p>
         </form>
 
         <div id="ocrOutputContainer" class="hidden space-y-4 pt-4 border-t border-slate-100">
@@ -180,8 +200,18 @@
                 <textarea id="rawOcrResult" readonly class="w-full h-32 text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-700 focus:outline-none"></textarea>
             </div>
             <div>
-                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">⚡ SuperNotes One-Pager Summary</span>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">⚡ SuperNotes Summary</span>
+                    <button id="downloadNoteBtn" class="text-xs font-bold text-white bg-[#744253] hover:bg-black px-3 py-1.5 rounded-lg transition cursor-pointer">⬇ Download PDF</button>
+                </div>
                 <div id="formattedSummaryResult" class="prose max-w-none text-xs p-4 bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl text-slate-800 leading-relaxed space-y-2"></div>
+            </div>
+        </div>
+
+        <div class="pt-4 border-t border-slate-100 space-y-2">
+            <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">🗂 History</span>
+            <div id="supernotesHistoryList" class="space-y-2">
+                <p class="text-xs text-slate-400">Loading history...</p>
             </div>
         </div>
     </div>
@@ -302,6 +332,101 @@
     let localDeckStore = [];
     let currentCardCursor = 0;
 
+    // Picker navigation state
+    let fcCurrentExam = null;
+    let fcCurrentSubjects = {};   // { subjectName: [{chapter, count}, ...] }
+    let fcCurrentSubject = null;
+    let fcPickerLevel = null;     // 'subject' | 'chapter'
+
+    function fcShowStage(stageId) {
+        ['fcHomeStage', 'fcPickerStage', 'flashcardDisplayStage'].forEach(id => {
+            document.getElementById(id).classList.toggle('hidden', id !== stageId);
+        });
+    }
+
+    async function openExam(examKey) {
+        try {
+            const response = await fetch(`/api/flashcards/structure?exam=${examKey}`);
+            const payload = await response.json();
+            if(!payload.success || !Object.keys(payload.subjects).length) {
+                alert("No subjects found for this exam yet.");
+                return;
+            }
+            fcCurrentExam = examKey;
+            fcCurrentSubjects = payload.subjects;
+            renderSubjectPicker();
+        } catch(e) {
+            alert("Error trying to load exam structure.");
+        }
+    }
+
+    function renderSubjectPicker() {
+        fcPickerLevel = 'subject';
+        document.getElementById('fcPickerTitle').innerText = `${fcCurrentExam} — Subjects`;
+        const list = document.getElementById('fcPickerList');
+        list.innerHTML = '';
+        Object.keys(fcCurrentSubjects).forEach(subject => {
+            const chapterCount = fcCurrentSubjects[subject].length;
+            const btn = document.createElement('button');
+            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm flex justify-between items-center";
+            btn.innerHTML = `<span>${subject}</span><span class="text-xs font-mono opacity-70">${chapterCount} chapters</span>`;
+            btn.onclick = () => openSubject(subject);
+            list.appendChild(btn);
+        });
+        fcShowStage('fcPickerStage');
+    }
+
+    function openSubject(subject) {
+        fcCurrentSubject = subject;
+        fcPickerLevel = 'chapter';
+        document.getElementById('fcPickerTitle').innerText = `${fcCurrentExam} — ${subject}`;
+        const list = document.getElementById('fcPickerList');
+        list.innerHTML = '';
+        fcCurrentSubjects[subject].forEach(({chapter, count}) => {
+            const btn = document.createElement('button');
+            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm flex justify-between items-center";
+            btn.innerHTML = `<span>${chapter}</span><span class="text-xs font-mono opacity-70">${count} cards</span>`;
+            btn.onclick = () => openChapter(chapter);
+            list.appendChild(btn);
+        });
+    }
+
+    function fcPickerBack() {
+        if(fcPickerLevel === 'chapter') {
+            renderSubjectPicker();
+        } else {
+            fcShowStage('fcHomeStage');
+        }
+    }
+
+    function fcBackToChapters() {
+        if(fcCurrentSubject) {
+            openSubject(fcCurrentSubject);
+            fcShowStage('fcPickerStage');
+        } else {
+            fcShowStage('fcHomeStage');
+        }
+    }
+
+    async function openChapter(chapter) {
+        try {
+            const params = new URLSearchParams({ exam: fcCurrentExam, subject: fcCurrentSubject, chapter });
+            const response = await fetch(`/api/flashcards/preload?${params.toString()}`);
+            const payload = await response.json();
+            if(payload.success && payload.deck.length) {
+                localDeckStore = payload.deck;
+                currentCardCursor = 0;
+                document.getElementById('fcActiveChapterLabel').innerText = `${fcCurrentSubject} · ${chapter}`;
+                fcShowStage('flashcardDisplayStage');
+                renderStageCard();
+            } else {
+                alert("No flashcards found for this chapter yet.");
+            }
+        } catch(e) {
+            alert("Error trying to process preloaded assets.");
+        }
+    }
+
     function renderStageCard() {
         if(!localDeckStore.length) return;
         document.querySelector('.deck-view-perspective').classList.remove('card-flipped');
@@ -316,21 +441,6 @@
         if(currentCardCursor < 0) currentCardCursor = localDeckStore.length - 1;
         if(currentCardCursor >= localDeckStore.length) currentCardCursor = 0;
         renderStageCard();
-    }
-
-    async function loadSystemDeck(examKey) {
-        try {
-            const response = await fetch(`/api/flashcards/preload?exam=${examKey}`);
-            const payload = await response.json();
-            if(payload.success) {
-                localDeckStore = payload.deck;
-                currentCardCursor = 0;
-                document.getElementById('flashcardDisplayStage').classList.remove('hidden');
-                renderStageCard();
-            }
-        } catch(e) {
-            alert("Error trying to process preloaded assets.");
-        }
     }
 
     async function buildAIFlashcards() {
@@ -352,7 +462,9 @@
             if(out.success) {
                 localDeckStore = out.deck;
                 currentCardCursor = 0;
-                document.getElementById('flashcardDisplayStage').classList.remove('hidden');
+                fcCurrentSubject = null;
+                document.getElementById('fcActiveChapterLabel').innerText = `AI Topic · ${inputField.value}`;
+                fcShowStage('flashcardDisplayStage');
                 renderStageCard();
             } else {
                 alert("AI Engine response failure: " + out.error);
@@ -366,10 +478,132 @@
     }
 
     const targetNoteInput = document.getElementById('note_file_input');
+    const MAX_UPLOAD_BYTES = 60 * 1024 * 1024;
     if(targetNoteInput) {
         targetNoteInput.addEventListener('change', e => {
-            document.getElementById('note-file-name').innerText = e.target.files[0]?.name || "No images parsed yet";
+            const chosenFile = e.target.files[0];
+            document.getElementById('note-file-name').innerText = chosenFile?.name || "No images parsed yet";
+            if(chosenFile && chosenFile.size > MAX_UPLOAD_BYTES) {
+                alert(`That file is ${(chosenFile.size / (1024*1024)).toFixed(1)}MB, which is over the 60MB upload limit. Try a lower-resolution scan or split the document into smaller parts.`);
+                targetNoteInput.value = "";
+                document.getElementById('note-file-name').innerText = "No images parsed yet";
+            }
         });
+    }
+
+    let currentNoteId = null;
+
+    function downloadCurrentNote() {
+        if(!currentNoteId) return;
+        window.open(`/api/study/notes/${currentNoteId}/pdf`, '_blank');
+    }
+
+    const downloadBtn = document.getElementById('downloadNoteBtn');
+    if(downloadBtn) {
+        downloadBtn.addEventListener('click', downloadCurrentNote);
+    }
+
+    function historyRowHTML(note) {
+        const dateStr = new Date(note.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        if(note.status === 'processing') {
+            return `
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
+                    <p class="text-[10px] text-amber-600">⏳ Processing... (${dateStr})</p>
+                </div>
+                <span class="text-[10px] font-bold text-amber-600 shrink-0">Please wait</span>
+            `;
+        }
+        if(note.status === 'failed') {
+            return `
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
+                    <p class="text-[10px] text-red-500">Failed (${dateStr})</p>
+                </div>
+                <span class="text-[10px] font-bold text-red-500 shrink-0">Error</span>
+            `;
+        }
+        return `
+            <div class="min-w-0">
+                <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
+                <p class="text-[10px] text-slate-400">${dateStr}</p>
+            </div>
+            <div class="flex gap-2 shrink-0">
+                <button class="text-[10px] font-bold text-[#744253] bg-white border border-[#B49286] px-2.5 py-1.5 rounded-lg hover:bg-[#744253] hover:text-white transition">View</button>
+                <button class="text-[10px] font-bold text-white bg-[#744253] px-2.5 py-1.5 rounded-lg hover:bg-black transition">⬇</button>
+            </div>
+        `;
+    }
+
+    async function loadNotesHistory() {
+        const listEl = document.getElementById('supernotesHistoryList');
+        if(!listEl) return;
+        try {
+            const res = await fetch('/api/study/notes/history');
+            const data = await res.json();
+            if(!data.success || !data.notes.length) {
+                listEl.innerHTML = '<p class="text-xs text-slate-400">No SuperNotes yet — process a note above to get started.</p>';
+                return;
+            }
+            listEl.innerHTML = '';
+            data.notes.forEach(note => {
+                const row = document.createElement('div');
+                row.className = "flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2";
+                row.innerHTML = historyRowHTML(note);
+                if(note.status === 'complete') {
+                    const [viewBtn, dlBtn] = row.querySelectorAll('button');
+                    viewBtn.onclick = () => viewHistoryNote(note.id);
+                    dlBtn.onclick = () => window.open(`/api/study/notes/${note.id}/pdf`, '_blank');
+                }
+                listEl.appendChild(row);
+            });
+        } catch(e) {
+            listEl.innerHTML = '<p class="text-xs text-red-400">Could not load history.</p>';
+        }
+    }
+
+    async function viewHistoryNote(noteId) {
+        try {
+            const res = await fetch(`/api/study/notes/${noteId}`);
+            const data = await res.json();
+            if(!data.success || data.status !== 'complete') return alert("This note isn't ready yet.");
+            currentNoteId = noteId;
+            document.getElementById('rawOcrResult').value = data.digitized_text;
+            document.getElementById('formattedSummaryResult').innerHTML = data.summary;
+            document.getElementById('ocrOutputContainer').classList.remove('hidden');
+            document.getElementById('ocrOutputContainer').scrollIntoView({ behavior: 'smooth' });
+        } catch(e) {
+            alert("Could not load that note.");
+        }
+    }
+
+    function pollNoteStatus(noteId) {
+        const statusMsg = document.getElementById('studyStatusMsg');
+        statusMsg.classList.remove('hidden');
+        statusMsg.innerText = "Processing in the background — large documents can take a few minutes. Feel free to navigate away; check History when you're back.";
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/study/notes/${noteId}/status`);
+                const data = await res.json();
+                if(!data.success) return;
+                if(data.status === 'complete') {
+                    clearInterval(interval);
+                    statusMsg.classList.add('hidden');
+                    viewHistoryNote(noteId);
+                    loadNotesHistory();
+                } else if(data.status === 'failed') {
+                    clearInterval(interval);
+                    statusMsg.classList.add('hidden');
+                    alert("Analysis Failed: " + (data.error || "Unknown error."));
+                    loadNotesHistory();
+                }
+            } catch(e) { /* keep polling silently on transient network errors */ }
+        }, 4000);
+    }
+
+    if(document.getElementById('supernotesHistoryList')) {
+        loadNotesHistory();
     }
 
     const noteSubmissionForm = document.getElementById('studyOcrForm');
@@ -382,7 +616,7 @@
             const actionBtn = document.getElementById('studyBtn');
             const nativeHTML = actionBtn.innerHTML;
             actionBtn.disabled = true;
-            actionBtn.innerText = "Processing handwritten notes via Multi-Modal Vision API...";
+            actionBtn.innerText = "Uploading...";
 
             const activeData = new FormData();
             activeData.append('note_file', referenceInput.files[0]);
@@ -391,9 +625,8 @@
                 const response = await fetch('/api/study/process-notes', { method: 'POST', body: activeData });
                 const jsonResult = await response.json();
                 if(jsonResult.success) {
-                    document.getElementById('rawOcrResult').value = jsonResult.digitized_text;
-                    document.getElementById('formattedSummaryResult').innerHTML = jsonResult.summary;
-                    document.getElementById('ocrOutputContainer').classList.remove('hidden');
+                    loadNotesHistory();
+                    pollNoteStatus(jsonResult.note_id);
                 } else {
                     alert("Analysis Failed: " + jsonResult.error);
                 }

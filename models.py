@@ -46,3 +46,14 @@ class QuizQuestion(db.Model):
     hint = db.Column(db.Text, nullable=True)
     explanation = db.Column(db.Text, nullable=True) # Post-attempt feedback structure
     user_answer = db.Column(db.Integer, nullable=True)
+
+class SuperNote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(20), default="processing")  # processing, complete, failed
+    error_message = db.Column(db.Text, nullable=True)
+    digitized_text = db.Column(db.Text, nullable=True)
+    summary_html = db.Column(db.Text, nullable=True)
+    pdf_data = db.Column(db.LargeBinary, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

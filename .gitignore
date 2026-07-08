@@ -14,3 +14,4 @@ instance/
 *.sqlite3
 .DS_Store
 Thumbs.db
+uploads

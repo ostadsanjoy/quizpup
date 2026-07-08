@@ -1,7 +1,10 @@
 import os
+import io
 import json
 import math
+import re
 import random
+import threading
 import uuid
 import requests
 import base64
@@ -9,17 +12,18 @@ import concurrent.futures
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
+from xhtml2pdf import pisa
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
 from flashcard_data import PRELOADED_DECKS
 
-from models import db, User, QuizSession, QuizQuestion 
+from models import db, User, QuizSession, QuizQuestion, SuperNote
 
 load_dotenv()
 
@@ -29,7 +33,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
@@ -39,8 +43,131 @@ db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+@login_manager.unauthorized_handler
+def handle_unauthorized():
+    if request.path.startswith('/api/'):
+        return jsonify({"success": False, "error": "Session expired or not logged in. Please refresh and log in again."}), 401
+    return redirect(url_for('login'))
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_ACTUAL_GEMINI_API_KEY_HERE")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+# ==========================================
+#          AI MODEL TIER SELECTION
+# ==========================================
+MODEL_LITE = 'gemini-3.1-flash-lite'
+MODEL_HEAVY = 'gemini-2.5-flash'
+
+HEAVY_TEXT_CHAR_THRESHOLD = 15000
+HEAVY_PDF_PAGE_THRESHOLD = 8
+
+def pick_model(is_hardest=False, char_count=0, page_count=0):
+    if is_hardest:
+        return MODEL_HEAVY
+    if char_count and char_count > HEAVY_TEXT_CHAR_THRESHOLD:
+        return MODEL_HEAVY
+    if page_count and page_count > HEAVY_PDF_PAGE_THRESHOLD:
+        return MODEL_HEAVY
+    return MODEL_LITE
+
+SUPERNOTE_CHUNK_CHAR_LIMIT = 6000
+CHAPTER_HEADING_PATTERN = re.compile(r'(?im)^\s*(chapter|part|unit)\s+([0-9]+|[ivxlcdm]+)\b.*$')
+
+def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
+    matches = list(CHAPTER_HEADING_PATTERN.finditer(text))
+    segments = []
+
+    if len(matches) >= 2:
+        for i, m in enumerate(matches):
+            start = m.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            segments.append((m.group().strip(), text[start:end]))
+    else:
+        segments = [(None, text)]
+
+    final_segments = []
+    for label, content in segments:
+        if len(content) <= max_chars:
+            final_segments.append((label, content))
+            continue
+        n_parts = math.ceil(len(content) / max_chars)
+        part_size = math.ceil(len(content) / n_parts)
+        for i in range(n_parts):
+            part = content[i * part_size: (i + 1) * part_size]
+            part_label = f"{label} (Part {i + 1})" if label else f"Part {i + 1}"
+            final_segments.append((part_label, part))
+
+    return final_segments
+
+def summarize_segment(label, content):
+    prompt = f"""
+    Create concise study notes from the text segment below. Identify the distinct
+    topics covered and summarize each one tightly.
+
+    Text segment:
+    {content}
+
+    Strict rules:
+    1. Use a <strong> heading for each distinct topic found, followed by a tight
+       <ul><li> bullet list. Maximum 5 bullets per topic, each bullet under 15 words.
+    2. Include only the highest-yield concepts, definitions, formulas, and facts.
+       Do not restate the source verbatim, include examples/filler, or repeat points.
+    3. Do not use markdown symbols like #, ##, or **.
+    """
+    response = ai_client.models.generate_content(
+        model=pick_model(char_count=len(content)),
+        contents=prompt,
+        config=types.GenerateContentConfig(max_output_tokens=700)
+    )
+    heading = f"<h4>{label}</h4>" if label else ""
+    return heading + response.text
+
+def batch_ocr_pdf(filepath, page_count, batch_size=6):
+    reader = PdfReader(filepath)
+    transcribed = ""
+    for start in range(0, page_count, batch_size):
+        writer = PdfWriter()
+        end = min(start + batch_size, page_count)
+        for i in range(start, end):
+            writer.add_page(reader.pages[i])
+
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        batch_bytes = buffer.getvalue()
+
+        ocr_prompt = f"Perform accurate OCR transcription on these scanned handwritten note pages (pages {start+1}-{end})."
+        response = ai_client.models.generate_content(
+            model=pick_model(page_count=(end - start)),
+            contents=[
+                types.Part.from_bytes(data=batch_bytes, mime_type="application/pdf"),
+                ocr_prompt
+            ]
+        )
+        transcribed += response.text + "\n\n"
+    return transcribed
+
+def generate_pdf_bytes(title, summary_html):
+    styled_html = f"""
+    <html>
+    <head>
+    <style>
+        body {{ font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }}
+        h1 {{ font-size: 16pt; color: #744253; margin-bottom: 4px; }}
+        h4 {{ font-size: 13pt; color: #744253; margin-top: 16px; margin-bottom: 4px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }}
+        strong {{ color: #744253; }}
+        ul {{ margin-top: 2px; margin-bottom: 10px; padding-left: 18px; }}
+        li {{ margin-bottom: 3px; }}
+    </style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        {summary_html}
+    </body>
+    </html>
+    """
+    buffer = io.BytesIO()
+    pisa.CreatePDF(styled_html, dest=buffer)
+    return buffer.getvalue()
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
@@ -52,24 +179,6 @@ MAIL_FROM_NAME = "QuizPup"
 
 OTP_VALID_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
-
-PRELOADED_DECKS = {
-    "JEE": [
-        {"question": "What is the hybridisation of Cl in ClO4-?", "answer": "sp3 hybridisation"},
-        {"question": "State the conditions required for Rolle's Theorem on interval [a,b].", "answer": "f(x) must be continuous on [a,b], differentiable on open (a,b), and f(a) = f(b)."},
-        {"question": "Evaluate value of Integral dx/(1+x^2) bounded from 0 to 1.", "answer": "pi / 4"}
-    ],
-    "NEET": [
-        {"question": "Where exactly does the Krebs cycle take place in eukaryotic cellular geometry?", "answer": "Within the internal mitochondrial matrix space."},
-        {"question": "What is the primary physiological function of interstitial Leydig cells?", "answer": "Synthesis and secretion of testicular androgen hormones (testosterone)."},
-        {"question": "Which specific adenohypophyseal hormone triggers immediate ovulation cycles?", "answer": "Luteinizing Hormone (LH surge)."}
-    ],
-    "CAT": [
-        {"question": "What is the combinations equation to distribute n items containing p identical entities?", "answer": "Total paths = n! / p!"},
-        {"question": "Solve for base element x constraints if: log_2(x) + log_4(x) = 6.", "answer": "Calculated value x = 16"},
-        {"question": "Define a structural network bottleneck inside Data Interpretation resource pathways.", "answer": "A localized point or node constraint that defines the absolute peak capacity flow of the complete graph map."}
-    ]
-}
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -306,6 +415,10 @@ def logout():
     
     return response
 
+@app.route('/ping', methods=['GET'])
+def ping_server():
+    return jsonify({"status": "healthy", "message": "Stay awake, pup!"}), 200
+
 # ==========================================
 #          PASSWORD RECOVERY ROUTES
 # ==========================================
@@ -423,13 +536,33 @@ def edit_profile():
 #        NEW FLASHCARD & STUDY ASYNC APIs
 # ==========================================
 
+@app.route('/api/flashcards/structure', methods=['GET'])
+@login_required
+def flashcards_structure():
+    exam_target = request.args.get('exam', 'JEE').upper()
+    exam_data = PRELOADED_DECKS.get(exam_target, {})
+
+    structure = {}
+    for subject, chapters in exam_data.items():
+        structure[subject] = [
+            {"chapter": chapter_name, "count": len(cards)}
+            for chapter_name, cards in chapters.items()
+        ]
+
+    return jsonify({"success": True, "exam": exam_target, "subjects": structure})
+
 @app.route('/api/flashcards/preload', methods=['GET'])
 @login_required
 def preload_flashcards():
     exam_target = request.args.get('exam', 'JEE').upper()
-    exam_deck = PRELOADED_DECKS.get(exam_target, [])
-    
-    return jsonify({"success": True, "deck": exam_deck})
+    subject_target = request.args.get('subject', '')
+    chapter_target = request.args.get('chapter', '')
+
+    exam_data = PRELOADED_DECKS.get(exam_target, {})
+    subject_data = exam_data.get(subject_target, {})
+    chapter_deck = subject_data.get(chapter_target, [])
+
+    return jsonify({"success": True, "deck": chapter_deck})
 
 @app.route('/api/flashcards/generate', methods=['POST'])
 @login_required
@@ -460,7 +593,7 @@ def generate_ai_flashcards():
     prompt = f"Create exactly 5 revision flashcards matching the core parameter topic context: '{topic}'. Keep answers concise."
     try:
         response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=pick_model(),
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -472,6 +605,59 @@ def generate_ai_flashcards():
         return jsonify({"success": True, "deck": res_data.get('cards', [])})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_mime_type):
+    with app_instance.app_context():
+        note = SuperNote.query.get(note_id)
+        try:
+            extracted_text = ""
+
+            if is_pdf:
+                reader = PdfReader(filepath)
+                for page in reader.pages:
+                    extracted_text += page.extract_text() or ""
+
+                page_count = len(reader.pages)
+                avg_chars_per_page = len(extracted_text.strip()) / max(page_count, 1)
+                # Low density per page means it's likely scanned/handwritten
+                looks_scanned = avg_chars_per_page < 40
+
+                if looks_scanned:
+                    extracted_text = batch_ocr_pdf(filepath, page_count)
+            else:
+                with open(filepath, 'rb') as f:
+                    img_bytes = f.read()
+
+                ocr_prompt = "Perform full digital text transcription from this photographic note document."
+                response = ai_client.models.generate_content(
+                    model=pick_model(),
+                    contents=[
+                        types.Part.from_bytes(data=img_bytes, mime_type=file_mime_type or "image/jpeg"),
+                        ocr_prompt
+                    ]
+                )
+                extracted_text = response.text
+
+            if os.path.exists(filepath):
+                os.remove(filepath)
+
+            segments = split_into_segments(extracted_text)
+            summary_blocks = [summarize_segment(label, content) for label, content in segments]
+            full_summary = "\n".join(summary_blocks)
+
+            pdf_bytes = generate_pdf_bytes(note.title, full_summary)
+
+            note.digitized_text = extracted_text.strip()
+            note.summary_html = full_summary
+            note.pdf_data = pdf_bytes
+            note.status = "complete"
+            db.session.commit()
+        except Exception as e:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            note.status = "failed"
+            note.error_message = str(e)
+            db.session.commit()
 
 @app.route('/api/study/process-notes', methods=['POST'])
 @login_required
@@ -485,75 +671,82 @@ def process_study_notes():
 
     filename = secure_filename(file.filename)
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{filename}")
-    file.save(filepath)
-
-    extracted_text = ""
     is_pdf = filename.lower().endswith('.pdf')
+    file_mime_type = file.content_type
 
     try:
-        if is_pdf:
-            reader = PdfReader(filepath)
-            for page in reader.pages:
-                extracted_text += page.extract_text() or ""
-            
-            if not extracted_text.strip():
-                with open(filepath, 'rb') as f:
-                    pdf_bytes = f.read()
-                
-                # Encode using standard google-genai dictionary syntax structure
-                b64_data = base64.b64encode(pdf_bytes).decode('utf-8')
-                ocr_prompt = "Perform accurate OCR transcription on these scanned handwritten note pages."
-                response = ai_client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[
-                        {"type": "document", "data": b64_data, "mime_type": "application/pdf"},
-                        {"type": "text", "text": ocr_prompt}
-                    ]
-                )
-                extracted_text = response.text
-        else:
-            with open(filepath, 'rb') as f:
-                img_bytes = f.read()
-            
-            b64_data = base64.b64encode(img_bytes).decode('utf-8')
-            ocr_prompt = "Perform full digital text transcription from this photographic note document."
-            response = ai_client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=[
-                    {"type": "image", "data": b64_data, "mime_type": file.content_type},
-                    {"type": "text", "text": ocr_prompt}
-                ]
-            )
-            extracted_text = response.text
-
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        summary_prompt = f"""
-        Analyze the following transcribed document text block carefully:
-        {extracted_text}
-        
-        Generate a concise One-Pager SuperNote summary. Render clean structural output lines.
-        Wrap important concepts or terms inside <strong> elements and format list hierarchies inside <ul><li> structures.
-        Do not use markdown symbols like #, ##, or **.
-        """
-        summary_res = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=summary_prompt
-        )
-
-        db.session.expunge_all()
-
-        return jsonify({
-            "success": True, 
-            "digitized_text": extracted_text.strip() or "No raw text segments discovered.", 
-            "summary": summary_res.text
-        })
+        file.save(filepath)
     except Exception as e:
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        db.session.expunge_all()
         return jsonify({"success": False, "error": str(e)}), 500
+
+    note_title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ').strip() or "Untitled Note"
+    note = SuperNote(user_id=current_user.id, title=note_title, status="processing")
+    db.session.add(note)
+    db.session.commit()
+    note_id = note.id
+
+    threading.Thread(
+        target=run_supernotes_job,
+        args=(app, note_id, filepath, filename, is_pdf, file_mime_type),
+        daemon=True
+    ).start()
+
+    return jsonify({
+        "success": True,
+        "note_id": note_id,
+        "title": note_title,
+        "status": "processing"
+    })
+
+@app.route('/api/study/notes/history', methods=['GET'])
+@login_required
+def supernotes_history():
+    notes = SuperNote.query.filter_by(user_id=current_user.id).order_by(SuperNote.created_at.desc()).all()
+    return jsonify({
+        "success": True,
+        "notes": [
+            {"id": n.id, "title": n.title, "status": n.status, "created_at": n.created_at.isoformat()}
+            for n in notes
+        ]
+    })
+
+@app.route('/api/study/notes/<int:note_id>/status', methods=['GET'])
+@login_required
+def supernotes_status(note_id):
+    note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note:
+        return jsonify({"success": False, "error": "Note not found."}), 404
+    return jsonify({"success": True, "status": note.status, "error": note.error_message})
+
+@app.route('/api/study/notes/<int:note_id>', methods=['GET'])
+@login_required
+def supernotes_view(note_id):
+    note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note:
+        return jsonify({"success": False, "error": "Note not found."}), 404
+    return jsonify({
+        "success": True,
+        "title": note.title,
+        "status": note.status,
+        "error": note.error_message,
+        "digitized_text": note.digitized_text,
+        "summary": note.summary_html,
+        "created_at": note.created_at.isoformat()
+    })
+
+@app.route('/api/study/notes/<int:note_id>/pdf', methods=['GET'])
+@login_required
+def supernotes_download(note_id):
+    note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note or note.status != "complete":
+        return jsonify({"success": False, "error": "Note not found or not ready yet."}), 404
+    safe_name = secure_filename(note.title) or "supernote"
+    return send_file(
+        io.BytesIO(note.pdf_data),
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f"{safe_name}.pdf"
+    )
 
 # ==========================================
 #          CORE ENGINE & AI LOGIC
@@ -592,7 +785,7 @@ def generate_quiz():
         hints_allowed = 0
 
     system_tone = "highly complex, rigorous, and university-level" if difficulty == "god mode" else "standard academic evaluation"
-    primary_model = 'gemini-2.5-flash'
+    primary_model = pick_model(is_hardest=(difficulty == "god mode"), char_count=len(source_text))
     context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
     batch_max = 70
@@ -772,6 +965,20 @@ def submit_quiz(session_id):
 
 with app.app_context():
     db.create_all()
+
+@app.errorhandler(413)
+def handle_file_too_large(e):
+    max_mb = app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
+    message = f"That file is too large. The maximum upload size is {max_mb}MB — try a lower-resolution scan or split the document into smaller parts."
+    if request.path.startswith('/api/'):
+        return jsonify({"success": False, "error": message}), 413
+    return message, 413
+
+@app.errorhandler(Exception)
+def handle_uncaught_exception(e):
+    if request.path.startswith('/api/'):
+        return jsonify({"success": False, "error": f"Unhandled server error: {str(e)}"}), 500
+    raise e
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
