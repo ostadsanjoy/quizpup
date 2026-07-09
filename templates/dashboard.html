@@ -493,9 +493,25 @@
 
     let currentNoteId = null;
 
+    async function openPdfDownload(relativeUrl, noteId) {
+        const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+        if(!isNative) {
+            window.open(window.location.origin + relativeUrl, '_blank');
+            return;
+        }
+        try {
+            const res = await fetch(`/api/study/notes/${noteId}/download-token`);
+            const data = await res.json();
+            if(!data.success) return alert("Could not prepare download: " + data.error);
+            window.Capacitor.Plugins.Browser.open({ url: window.location.origin + data.url });
+        } catch(e) {
+            alert("Could not prepare download. Please try again.");
+        }
+    }
+
     function downloadCurrentNote() {
         if(!currentNoteId) return;
-        window.open(`/api/study/notes/${currentNoteId}/pdf`, '_blank');
+        openPdfDownload(`/api/study/notes/${currentNoteId}/pdf`, currentNoteId);
     }
 
     const downloadBtn = document.getElementById('downloadNoteBtn');
@@ -553,7 +569,7 @@
                 if(note.status === 'complete') {
                     const [viewBtn, dlBtn] = row.querySelectorAll('button');
                     viewBtn.onclick = () => viewHistoryNote(note.id);
-                    dlBtn.onclick = () => window.open(`/api/study/notes/${note.id}/pdf`, '_blank');
+                    dlBtn.onclick = () => openPdfDownload(`/api/study/notes/${note.id}/pdf`, note.id);
                 }
                 listEl.appendChild(row);
             });

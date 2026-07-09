@@ -15,7 +15,9 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 from pypdf import PdfReader, PdfWriter
 from xhtml2pdf import pisa
 from google import genai
@@ -23,6 +25,7 @@ from google.genai import types
 from supabase import create_client, Client
 from flashcard_data import PRELOADED_DECKS
 
+from sqlalchemy import inspect, text
 from models import db, User, QuizSession, QuizQuestion, SuperNote
 
 load_dotenv()
@@ -168,6 +171,20 @@ def generate_pdf_bytes(title, summary_html):
     buffer = io.BytesIO()
     pisa.CreatePDF(styled_html, dest=buffer)
     return buffer.getvalue()
+
+download_token_serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+def generate_download_token(note_id, user_id):
+    return download_token_serializer.dumps({"note_id": note_id, "user_id": user_id})
+
+def verify_download_token(token, note_id):
+    try:
+        data = download_token_serializer.loads(token, max_age=300)
+    except (BadSignature, SignatureExpired):
+        return None
+    if data.get("note_id") != note_id:
+        return None
+    return data.get("user_id")
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
@@ -734,10 +751,28 @@ def supernotes_view(note_id):
         "created_at": note.created_at.isoformat()
     })
 
-@app.route('/api/study/notes/<int:note_id>/pdf', methods=['GET'])
+@app.route('/api/study/notes/<int:note_id>/download-token', methods=['GET'])
 @login_required
-def supernotes_download(note_id):
+def supernotes_download_token(note_id):
     note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note or note.status != "complete":
+        return jsonify({"success": False, "error": "Note not found or not ready yet."}), 404
+    token = generate_download_token(note_id, current_user.id)
+    return jsonify({"success": True, "url": f"/api/study/notes/{note_id}/pdf?token={token}"})
+
+@app.route('/api/study/notes/<int:note_id>/pdf', methods=['GET'])
+def supernotes_download(note_id):
+    token = request.args.get('token')
+    if current_user.is_authenticated:
+        owner_id = current_user.id
+    elif token:
+        owner_id = verify_download_token(token, note_id)
+        if owner_id is None:
+            return jsonify({"success": False, "error": "This download link has expired. Please try downloading again."}), 401
+    else:
+        return jsonify({"success": False, "error": "Session expired or not logged in. Please refresh and log in again."}), 401
+
+    note = SuperNote.query.filter_by(id=note_id, user_id=owner_id).first()
     if not note or note.status != "complete":
         return jsonify({"success": False, "error": "Note not found or not ready yet."}), 404
     safe_name = secure_filename(note.title) or "supernote"
@@ -963,8 +998,25 @@ def submit_quiz(session_id):
     
     return jsonify({"score": score, "total": session_instance.total_questions, "recommendation": session_instance.recommendation})
 
+def sync_missing_columns():
+    inspector = inspect(db.engine)
+    existing_tables = set(inspector.get_table_names())
+    for mapper in db.Model.registry.mappers:
+        table = mapper.local_table
+        if table is None or table.name not in existing_tables:
+            continue
+        existing_cols = {col['name'] for col in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing_cols:
+                continue
+            col_type = column.type.compile(dialect=db.engine.dialect)
+            with db.engine.connect() as conn:
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}'))
+                conn.commit()
+
 with app.app_context():
     db.create_all()
+    sync_missing_columns()
 
 @app.errorhandler(413)
 def handle_file_too_large(e):
@@ -976,6 +1028,10 @@ def handle_file_too_large(e):
 
 @app.errorhandler(Exception)
 def handle_uncaught_exception(e):
+    if isinstance(e, HTTPException):
+        if request.path.startswith('/api/'):
+            return jsonify({"success": False, "error": e.description}), e.code
+        return e
     if request.path.startswith('/api/'):
         return jsonify({"success": False, "error": f"Unhandled server error: {str(e)}"}), 500
     raise e
