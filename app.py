@@ -763,12 +763,12 @@ def supernotes_download_token(note_id):
 @app.route('/api/study/notes/<int:note_id>/pdf', methods=['GET'])
 def supernotes_download(note_id):
     token = request.args.get('token')
-    if current_user.is_authenticated:
-        owner_id = current_user.id
-    elif token:
+    if token:
         owner_id = verify_download_token(token, note_id)
         if owner_id is None:
             return jsonify({"success": False, "error": "This download link has expired. Please try downloading again."}), 401
+    elif current_user.is_authenticated:
+        owner_id = current_user.id
     else:
         return jsonify({"success": False, "error": "Session expired or not logged in. Please refresh and log in again."}), 401
 
