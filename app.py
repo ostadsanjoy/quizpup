@@ -1,5 +1,6 @@
 import os
 import io
+import time
 import json
 import math
 import re
@@ -19,7 +20,8 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from pypdf import PdfReader, PdfWriter
-from xhtml2pdf import pisa
+from fpdf import FPDF
+from html.parser import HTMLParser
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
@@ -73,6 +75,41 @@ def pick_model(is_hardest=False, char_count=0, page_count=0):
         return MODEL_HEAVY
     return MODEL_LITE
 
+GEMINI_RPM_TARGET = 10
+
+_gemini_window_lock = threading.Lock()
+_gemini_window_start = [time.monotonic()]
+_gemini_window_count = [0]
+
+def _wait_for_rate_slot():
+    while True:
+        with _gemini_window_lock:
+            now = time.monotonic()
+            elapsed = now - _gemini_window_start[0]
+            if elapsed >= 60:
+                _gemini_window_start[0] = now
+                _gemini_window_count[0] = 0
+                elapsed = 0
+            if _gemini_window_count[0] < GEMINI_RPM_TARGET:
+                _gemini_window_count[0] += 1
+                return
+            sleep_time = 60 - elapsed
+        time.sleep(sleep_time)
+
+def call_gemini(**kwargs):
+    last_error = None
+    for attempt in range(3):
+        _wait_for_rate_slot()
+        try:
+            return ai_client.models.generate_content(**kwargs)
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                last_error = e
+                time.sleep(15 * (attempt + 1))
+                continue
+            raise
+    raise last_error
+
 SUPERNOTE_CHUNK_CHAR_LIMIT = 6000
 CHAPTER_HEADING_PATTERN = re.compile(r'(?im)^\s*(chapter|part|unit)\s+([0-9]+|[ivxlcdm]+)\b.*$')
 
@@ -103,74 +140,158 @@ def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
     return final_segments
 
 def summarize_segment(label, content):
+    source_words = len(content.split())
+    target_words = max(35, round(source_words * 0.175))
     prompt = f"""
-    Create concise study notes from the text segment below. Identify the distinct
-    topics covered and summarize each one tightly.
+    Create concise study notes from the text segment below. Identify only the
+    MOST IMPORTANT topics covered — this is a compressed study aid, not a full
+    rewrite, so skip minor or repetitive details entirely if needed.
 
     Text segment:
     {content}
 
     Strict rules:
-    1. Use a <strong> heading for each distinct topic found, followed by a tight
-       <ul><li> bullet list. Maximum 5 bullets per topic, each bullet under 15 words.
-    2. Include only the highest-yield concepts, definitions, formulas, and facts.
+    1. The total output must be approximately {target_words} words — roughly
+       15-20% of the source length. Do not pad or significantly exceed this.
+    2. Use a <strong> heading for each distinct topic you keep, followed by a
+       tight <ul><li> bullet list, each bullet under 15 words.
+    3. Include only the highest-yield concepts, definitions, formulas, and facts.
        Do not restate the source verbatim, include examples/filler, or repeat points.
-    3. Do not use markdown symbols like #, ##, or **.
+    4. Do not use markdown symbols like #, ##, or **.
     """
-    response = ai_client.models.generate_content(
+    response = call_gemini(
         model=pick_model(char_count=len(content)),
         contents=prompt,
-        config=types.GenerateContentConfig(max_output_tokens=700)
+        config=types.GenerateContentConfig(max_output_tokens=max(300, target_words * 4))
     )
     heading = f"<h4>{label}</h4>" if label else ""
     return heading + response.text
 
-def batch_ocr_pdf(filepath, page_count, batch_size=6):
+def batch_ocr_pdf(filepath, page_count, batch_size=15):
     reader = PdfReader(filepath)
-    transcribed = ""
-    for start in range(0, page_count, batch_size):
+    batch_ranges = [(start, min(start + batch_size, page_count)) for start in range(0, page_count, batch_size)]
+
+    # Pre-extract each batch's bytes sequentially first — pypdf isn't guaranteed
+    # thread-safe, so no concurrent access to the shared reader/writer objects.
+    batch_byte_chunks = []
+    for start, end in batch_ranges:
         writer = PdfWriter()
-        end = min(start + batch_size, page_count)
         for i in range(start, end):
             writer.add_page(reader.pages[i])
-
         buffer = io.BytesIO()
         writer.write(buffer)
-        batch_bytes = buffer.getvalue()
+        batch_byte_chunks.append(buffer.getvalue())
 
+    def ocr_one_batch(idx, start, end):
         ocr_prompt = f"Perform accurate OCR transcription on these scanned handwritten note pages (pages {start+1}-{end})."
-        response = ai_client.models.generate_content(
+        response = call_gemini(
             model=pick_model(page_count=(end - start)),
             contents=[
-                types.Part.from_bytes(data=batch_bytes, mime_type="application/pdf"),
+                types.Part.from_bytes(data=batch_byte_chunks[idx], mime_type="application/pdf"),
                 ocr_prompt
             ]
         )
-        transcribed += response.text + "\n\n"
-    return transcribed
+        return response.text
+
+    results_by_index = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(batch_ranges), GEMINI_RPM_TARGET)) as executor:
+        future_to_index = {
+            executor.submit(ocr_one_batch, idx, start, end): idx
+            for idx, (start, end) in enumerate(batch_ranges)
+        }
+        for future in concurrent.futures.as_completed(future_to_index):
+            idx = future_to_index[future]
+            results_by_index[idx] = future.result()
+
+    return "\n\n".join(results_by_index[i] for i in range(len(batch_ranges)))
+
+class SummaryHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.blocks = []
+        self.current_tag = None
+        self.current_text = ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("h4", "strong", "li"):
+            self.current_tag = tag
+            self.current_text = ""
+
+    def handle_endtag(self, tag):
+        if tag in ("h4", "strong", "li") and self.current_tag == tag:
+            text = self.current_text.strip()
+            if text:
+                self.blocks.append((tag, text))
+            self.current_tag = None
+            self.current_text = ""
+
+    def handle_data(self, data):
+        if self.current_tag:
+            self.current_text += data
+
+def parse_summary_html(summary_html):
+    parser = SummaryHTMLParser()
+    parser.feed(summary_html)
+
+    structure = []
+    current_chapter = None
+    current_topic = None
+
+    for tag, text in parser.blocks:
+        if tag == "h4":
+            current_chapter = {"chapter": text, "topics": []}
+            structure.append(current_chapter)
+            current_topic = None
+        elif tag == "strong":
+            if current_chapter is None:
+                current_chapter = {"chapter": None, "topics": []}
+                structure.append(current_chapter)
+            current_topic = {"heading": text, "bullets": []}
+            current_chapter["topics"].append(current_topic)
+        elif tag == "li":
+            if current_topic is None:
+                if current_chapter is None:
+                    current_chapter = {"chapter": None, "topics": []}
+                    structure.append(current_chapter)
+                current_topic = {"heading": None, "bullets": []}
+                current_chapter["topics"].append(current_topic)
+            current_topic["bullets"].append(text)
+
+    return structure
+
+FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "fonts")
 
 def generate_pdf_bytes(title, summary_html):
-    styled_html = f"""
-    <html>
-    <head>
-    <style>
-        body {{ font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }}
-        h1 {{ font-size: 16pt; color: #744253; margin-bottom: 4px; }}
-        h4 {{ font-size: 13pt; color: #744253; margin-top: 16px; margin-bottom: 4px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }}
-        strong {{ color: #744253; }}
-        ul {{ margin-top: 2px; margin-bottom: 10px; padding-left: 18px; }}
-        li {{ margin-bottom: 3px; }}
-    </style>
-    </head>
-    <body>
-        <h1>{title}</h1>
-        {summary_html}
-    </body>
-    </html>
-    """
-    buffer = io.BytesIO()
-    pisa.CreatePDF(styled_html, dest=buffer)
-    return buffer.getvalue()
+    structure = parse_summary_html(summary_html)
+
+    pdf = FPDF(format="A4")
+    pdf.add_font("DejaVu", "", os.path.join(FONT_DIR, "DejaVuSans.ttf"))
+    pdf.add_font("DejaVu", "B", os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf"))
+    pdf.set_margins(15, 15, 15)
+    pdf.set_auto_page_break(True, margin=15)
+    pdf.add_page()
+
+    pdf.set_font("DejaVu", "B", 15)
+    pdf.multi_cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_draw_color(180, 146, 134)
+    pdf.line(15, pdf.get_y(), pdf.w - 15, pdf.get_y())
+    pdf.ln(3)
+
+    with pdf.text_columns(ncols=2, gutter=8, text_align="LEFT", line_height=1.2) as cols:
+        for chapter in structure:
+            if chapter["chapter"]:
+                pdf.set_font("DejaVu", "B", 9.5)
+                cols.write(text=f"{chapter['chapter']}\n")
+            for topic in chapter["topics"]:
+                if topic["heading"]:
+                    pdf.set_font("DejaVu", "B", 8)
+                    cols.write(text=f"{topic['heading']}\n")
+                pdf.set_font("DejaVu", "", 7.5)
+                for bullet in topic["bullets"]:
+                    with cols.paragraph(bullet_string="\u2022", indent=4, bottom_margin=1) as par:
+                        par.write(bullet)
+
+    return bytes(pdf.output())
 
 download_token_serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
@@ -609,7 +730,7 @@ def generate_ai_flashcards():
 
     prompt = f"Create exactly 5 revision flashcards matching the core parameter topic context: '{topic}'. Keep answers concise."
     try:
-        response = ai_client.models.generate_content(
+        response = call_gemini(
             model=pick_model(),
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -646,7 +767,7 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
                     img_bytes = f.read()
 
                 ocr_prompt = "Perform full digital text transcription from this photographic note document."
-                response = ai_client.models.generate_content(
+                response = call_gemini(
                     model=pick_model(),
                     contents=[
                         types.Part.from_bytes(data=img_bytes, mime_type=file_mime_type or "image/jpeg"),
@@ -659,7 +780,16 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
                 os.remove(filepath)
 
             segments = split_into_segments(extracted_text)
-            summary_blocks = [summarize_segment(label, content) for label, content in segments]
+            summary_results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(segments), GEMINI_RPM_TARGET)) as executor:
+                future_to_index = {
+                    executor.submit(summarize_segment, label, content): idx
+                    for idx, (label, content) in enumerate(segments)
+                }
+                for future in concurrent.futures.as_completed(future_to_index):
+                    idx = future_to_index[future]
+                    summary_results[idx] = future.result()
+            summary_blocks = [summary_results[i] for i in range(len(segments))]
             full_summary = "\n".join(summary_blocks)
 
             pdf_bytes = generate_pdf_bytes(note.title, full_summary)
@@ -861,7 +991,7 @@ def generate_quiz():
         3. Provide a short, single-sentence indirect hint for each question.
         4. Provide a clear, maximum 2-sentence conceptual explanation details string.
         """
-        response = ai_client.models.generate_content(
+        response = call_gemini(
             model=primary_model,
             contents=prompt,
             config=types.GenerateContentConfig(
