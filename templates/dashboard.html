@@ -204,9 +204,35 @@
                     <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">⚡ SuperNotes Summary</span>
                     <button id="downloadNoteBtn" class="text-xs font-bold text-white bg-[#744253] hover:bg-black px-3 py-1.5 rounded-lg transition cursor-pointer">⬇ Download PDF</button>
                 </div>
-                <div id="formattedSummaryResult" class="prose max-w-none text-xs p-4 bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl text-slate-800 leading-relaxed space-y-2"></div>
+                <div id="formattedSummaryResult" class="summary-content max-w-none text-xs p-4 bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl text-slate-800 leading-relaxed"></div>
             </div>
         </div>
+
+        <style>
+            #formattedSummaryResult h4 {
+                font-size: 0.95rem;
+                font-weight: 700;
+                color: #744253;
+                margin-top: 14px;
+                margin-bottom: 4px;
+                padding-bottom: 4px;
+                border-bottom: 1px solid #B49286;
+            }
+            #formattedSummaryResult h4:first-child { margin-top: 0; }
+            #formattedSummaryResult strong {
+                display: block;
+                font-weight: 700;
+                color: #744253;
+                margin-top: 8px;
+                margin-bottom: 2px;
+            }
+            #formattedSummaryResult ul {
+                list-style: disc;
+                padding-left: 1.25rem;
+                margin-bottom: 6px;
+            }
+            #formattedSummaryResult li { margin-bottom: 2px; }
+        </style>
 
         <div class="pt-4 border-t border-slate-100 space-y-2">
             <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">🗂 History</span>

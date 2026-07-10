@@ -21,7 +21,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from pypdf import PdfReader, PdfWriter
 from fpdf import FPDF
-from html.parser import HTMLParser
+from html import escape
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
@@ -107,7 +107,7 @@ def call_gemini(**kwargs):
             raise
     raise last_error
 
-SUPERNOTE_CHUNK_CHAR_LIMIT = 15000
+SUPERNOTE_CHUNK_CHAR_LIMIT = 8000
 CHAPTER_HEADING_PATTERN = re.compile(r'(?im)^\s*(chapter|part|unit)\s+([0-9]+|[ivxlcdm]+)\b.*$')
 
 def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
@@ -136,7 +136,28 @@ def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
 
     return final_segments
 
-def summarize_segment(label, content):
+SUMMARY_SCHEMA = types.Schema(
+    type=types.Type.OBJECT,
+    properties={
+        "topics": types.Schema(
+            type=types.Type.ARRAY,
+            items=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "heading": types.Schema(type=types.Type.STRING),
+                    "bullets": types.Schema(
+                        type=types.Type.ARRAY,
+                        items=types.Schema(type=types.Type.STRING)
+                    )
+                },
+                required=["heading", "bullets"]
+            )
+        )
+    },
+    required=["topics"]
+)
+
+def summarize_segment(label, content, retry_tokens=None):
     source_words = len(content.split())
     target_words = max(35, round(source_words * 0.175))
     prompt = f"""
@@ -148,21 +169,40 @@ def summarize_segment(label, content):
     {content}
 
     Strict rules:
-    1. The total output must be approximately {target_words} words — roughly
-       15-20% of the source length. Do not pad or significantly exceed this.
-    2. Use a <strong> heading for each distinct topic you keep, followed by a
-       tight <ul><li> bullet list, each bullet under 15 words.
+    1. The combined bullets across all topics must total approximately
+       {target_words} words — roughly 15-20% of the source length. Do not pad
+       or significantly exceed this.
+    2. Give each distinct topic you keep a short heading, with a tight list of
+       bullets, each bullet under 15 words.
     3. Include only the highest-yield concepts, definitions, formulas, and facts.
        Do not restate the source verbatim, include examples/filler, or repeat points.
-    4. Do not use markdown symbols like #, ##, or **.
     """
+    # Content with many short, distinct topics (e.g. a cheatsheet-style list)
+    # needs a token budget driven by topic count/JSON overhead, not just word
+    # count — so this floor is generous rather than tightly coupled to target_words.
+    token_budget = retry_tokens or max(2000, target_words * 6)
+
     response = call_gemini(
         model=pick_model(),
         contents=prompt,
-        config=types.GenerateContentConfig(max_output_tokens=max(300, target_words * 4))
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=SUMMARY_SCHEMA,
+            max_output_tokens=token_budget
+        )
     )
-    heading = f"<h4>{label}</h4>" if label else ""
-    return heading + response.text
+
+    finish_reason = None
+    if response.candidates:
+        finish_reason = str(response.candidates[0].finish_reason)
+
+    if "MAX_TOKENS" in (finish_reason or "") and retry_tokens is None:
+        # Response got cut off mid-generation — retry once with double the budget
+        # instead of silently accepting truncated/incomplete JSON.
+        return summarize_segment(label, content, retry_tokens=token_budget * 2)
+
+    parsed = json.loads(response.text)
+    return {"chapter": label, "topics": parsed.get("topics", [])}
 
 def batch_ocr_pdf(filepath, page_count, batch_size=15):
     reader = PdfReader(filepath)
@@ -202,65 +242,21 @@ def batch_ocr_pdf(filepath, page_count, batch_size=15):
 
     return "\n\n".join(results_by_index[i] for i in range(len(batch_ranges)))
 
-class SummaryHTMLParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.blocks = []
-        self.current_tag = None
-        self.current_text = ""
-
-    def handle_starttag(self, tag, attrs):
-        if tag in ("h4", "strong", "li"):
-            self.current_tag = tag
-            self.current_text = ""
-
-    def handle_endtag(self, tag):
-        if tag in ("h4", "strong", "li") and self.current_tag == tag:
-            text = self.current_text.strip()
-            if text:
-                self.blocks.append((tag, text))
-            self.current_tag = None
-            self.current_text = ""
-
-    def handle_data(self, data):
-        if self.current_tag:
-            self.current_text += data
-
-def parse_summary_html(summary_html):
-    parser = SummaryHTMLParser()
-    parser.feed(summary_html)
-
-    structure = []
-    current_chapter = None
-    current_topic = None
-
-    for tag, text in parser.blocks:
-        if tag == "h4":
-            current_chapter = {"chapter": text, "topics": []}
-            structure.append(current_chapter)
-            current_topic = None
-        elif tag == "strong":
-            if current_chapter is None:
-                current_chapter = {"chapter": None, "topics": []}
-                structure.append(current_chapter)
-            current_topic = {"heading": text, "bullets": []}
-            current_chapter["topics"].append(current_topic)
-        elif tag == "li":
-            if current_topic is None:
-                if current_chapter is None:
-                    current_chapter = {"chapter": None, "topics": []}
-                    structure.append(current_chapter)
-                current_topic = {"heading": None, "bullets": []}
-                current_chapter["topics"].append(current_topic)
-            current_topic["bullets"].append(text)
-
-    return structure
+def render_summary_html(structured_summary):
+    parts = []
+    for chapter in structured_summary:
+        if chapter.get("chapter"):
+            parts.append(f"<h4>{escape(chapter['chapter'])}</h4>")
+        for topic in chapter.get("topics", []):
+            if topic.get("heading"):
+                parts.append(f"<strong>{escape(topic['heading'])}</strong>")
+            bullets_html = "".join(f"<li>{escape(b)}</li>" for b in topic.get("bullets", []))
+            parts.append(f"<ul>{bullets_html}</ul>")
+    return "\n".join(parts)
 
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "fonts")
 
-def generate_pdf_bytes(title, summary_html):
-    structure = parse_summary_html(summary_html)
-
+def generate_pdf_bytes(title, structured_summary):
     pdf = FPDF(format="A4")
     pdf.add_font("DejaVu", "", os.path.join(FONT_DIR, "DejaVuSans.ttf"))
     pdf.add_font("DejaVu", "B", os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf"))
@@ -275,16 +271,16 @@ def generate_pdf_bytes(title, summary_html):
     pdf.ln(3)
 
     with pdf.text_columns(ncols=2, gutter=8, text_align="LEFT", line_height=1.2) as cols:
-        for chapter in structure:
-            if chapter["chapter"]:
+        for chapter in structured_summary:
+            if chapter.get("chapter"):
                 pdf.set_font("DejaVu", "B", 9.5)
                 cols.write(text=f"{chapter['chapter']}\n")
-            for topic in chapter["topics"]:
-                if topic["heading"]:
+            for topic in chapter.get("topics", []):
+                if topic.get("heading"):
                     pdf.set_font("DejaVu", "B", 8)
                     cols.write(text=f"{topic['heading']}\n")
                 pdf.set_font("DejaVu", "", 7.5)
-                for bullet in topic["bullets"]:
+                for bullet in topic.get("bullets", []):
                     with cols.paragraph(bullet_string="\u2022", indent=4, bottom_margin=1) as par:
                         par.write(bullet)
 
@@ -786,10 +782,10 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
                 for future in concurrent.futures.as_completed(future_to_index):
                     idx = future_to_index[future]
                     summary_results[idx] = future.result()
-            summary_blocks = [summary_results[i] for i in range(len(segments))]
-            full_summary = "\n".join(summary_blocks)
+            structured_summary = [summary_results[i] for i in range(len(segments))]
 
-            pdf_bytes = generate_pdf_bytes(note.title, full_summary)
+            full_summary = render_summary_html(structured_summary)
+            pdf_bytes = generate_pdf_bytes(note.title, structured_summary)
 
             note.digitized_text = extracted_text.strip()
             note.summary_html = full_summary
