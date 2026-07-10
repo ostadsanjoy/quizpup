@@ -64,14 +64,11 @@ MODEL_LITE = 'gemini-3.1-flash-lite'
 MODEL_HEAVY = 'gemini-2.5-flash'
 
 HEAVY_TEXT_CHAR_THRESHOLD = 15000
-HEAVY_PDF_PAGE_THRESHOLD = 8
 
-def pick_model(is_hardest=False, char_count=0, page_count=0):
+def pick_model(is_hardest=False, char_count=0):
     if is_hardest:
         return MODEL_HEAVY
     if char_count and char_count > HEAVY_TEXT_CHAR_THRESHOLD:
-        return MODEL_HEAVY
-    if page_count and page_count > HEAVY_PDF_PAGE_THRESHOLD:
         return MODEL_HEAVY
     return MODEL_LITE
 
@@ -110,7 +107,7 @@ def call_gemini(**kwargs):
             raise
     raise last_error
 
-SUPERNOTE_CHUNK_CHAR_LIMIT = 6000
+SUPERNOTE_CHUNK_CHAR_LIMIT = 15000
 CHAPTER_HEADING_PATTERN = re.compile(r'(?im)^\s*(chapter|part|unit)\s+([0-9]+|[ivxlcdm]+)\b.*$')
 
 def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
@@ -160,7 +157,7 @@ def summarize_segment(label, content):
     4. Do not use markdown symbols like #, ##, or **.
     """
     response = call_gemini(
-        model=pick_model(char_count=len(content)),
+        model=pick_model(),
         contents=prompt,
         config=types.GenerateContentConfig(max_output_tokens=max(300, target_words * 4))
     )
@@ -185,7 +182,7 @@ def batch_ocr_pdf(filepath, page_count, batch_size=15):
     def ocr_one_batch(idx, start, end):
         ocr_prompt = f"Perform accurate OCR transcription on these scanned handwritten note pages (pages {start+1}-{end})."
         response = call_gemini(
-            model=pick_model(page_count=(end - start)),
+            model=pick_model(),
             contents=[
                 types.Part.from_bytes(data=batch_byte_chunks[idx], mime_type="application/pdf"),
                 ocr_prompt
