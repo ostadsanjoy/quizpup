@@ -136,6 +136,11 @@
                     <button onclick="buildAIFlashcards()" id="fcGenBtn" class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer">Build</button>
                 </div>
             </div>
+
+            <div id="fcMyDecksSection" class="border-t border-slate-100 pt-4 space-y-2 hidden">
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Your Saved Decks</span>
+                <div id="fcMyDecksList" class="grid grid-cols-3 gap-2"></div>
+            </div>
         </div>
 
         <!-- STAGE 2: Subject / Chapter picker -->
@@ -370,6 +375,51 @@
         });
     }
 
+    async function loadMyFlashcardDecks() {
+        const section = document.getElementById('fcMyDecksSection');
+        const list = document.getElementById('fcMyDecksList');
+        if(!section || !list) return;
+        try {
+            const response = await fetch('/api/flashcards/my-decks');
+            const payload = await response.json();
+            if(payload.success && payload.decks.length) {
+                list.innerHTML = '';
+                payload.decks.forEach(deck => {
+                    const btn = document.createElement('button');
+                    btn.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-2 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm truncate";
+                    btn.title = deck.topic;
+                    btn.innerText = ` ${deck.topic}`;
+                    btn.onclick = () => openSavedDeck(deck.id, deck.topic);
+                    list.appendChild(btn);
+                });
+                section.classList.remove('hidden');
+            } else {
+                section.classList.add('hidden');
+            }
+        } catch(e) {
+            section.classList.add('hidden');
+        }
+    }
+
+    async function openSavedDeck(deckId, topic) {
+        try {
+            const response = await fetch(`/api/flashcards/my-decks/${deckId}`);
+            const payload = await response.json();
+            if(payload.success && payload.deck.length) {
+                localDeckStore = payload.deck;
+                currentCardCursor = 0;
+                fcCurrentSubject = null;
+                document.getElementById('fcActiveChapterLabel').innerText = `AI Topic · ${topic}`;
+                fcShowStage('flashcardDisplayStage');
+                renderStageCard();
+            } else {
+                alert("This saved deck has no flashcards.");
+            }
+        } catch(e) {
+            alert("Error trying to load your saved deck.");
+        }
+    }
+
     async function openExam(examKey) {
         try {
             const response = await fetch(`/api/flashcards/structure?exam=${examKey}`);
@@ -492,6 +542,7 @@
                 document.getElementById('fcActiveChapterLabel').innerText = `AI Topic · ${inputField.value}`;
                 fcShowStage('flashcardDisplayStage');
                 renderStageCard();
+                loadMyFlashcardDecks();
             } else {
                 alert("AI Engine response failure: " + out.error);
             }
@@ -729,6 +780,10 @@
                 btn.innerHTML = originalHTML;
             }
         });
+    }
+
+    if (document.getElementById('fcMyDecksSection')) {
+        loadMyFlashcardDecks();
     }
 </script>
 {% endblock %}

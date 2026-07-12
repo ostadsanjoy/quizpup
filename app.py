@@ -28,7 +28,7 @@ from supabase import create_client, Client
 from flashcard_data import PRELOADED_DECKS
 
 from sqlalchemy import inspect, text
-from models import db, User, QuizSession, QuizQuestion, SuperNote
+from models import db, User, QuizSession, QuizQuestion, SuperNote, FlashcardDeck
 
 load_dotenv()
 
@@ -721,7 +721,7 @@ def generate_ai_flashcards():
         required=["cards"]
     )
 
-    prompt = f"Create 15 - 25 revision flashcards matching the core parameter topic context: '{topic}'. Keep answers concise."
+    prompt = f"Create 15 - 25 revision flashcards matching the core and most important concepts in the parameter topic context: '{topic}'. Keep answers within 3 lines."
     try:
         response = call_gemini(
             model=pick_model(),
@@ -733,9 +733,44 @@ def generate_ai_flashcards():
             )
         )
         res_data = json.loads(response.text)
-        return jsonify({"success": True, "deck": res_data.get('cards', [])})
+        cards = res_data.get('cards', [])
+
+        saved_deck = FlashcardDeck(
+            user_id=current_user.id,
+            topic=topic,
+            cards_json=json.dumps(cards)
+        )
+        db.session.add(saved_deck)
+        db.session.commit()
+
+        return jsonify({"success": True, "deck": cards, "deck_id": saved_deck.id})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/flashcards/my-decks', methods=['GET'])
+@login_required
+def my_flashcard_decks():
+    decks = FlashcardDeck.query.filter_by(user_id=current_user.id).order_by(FlashcardDeck.created_at.desc()).all()
+    return jsonify({
+        "success": True,
+        "decks": [
+            {
+                "id": d.id,
+                "topic": d.topic,
+                "count": len(json.loads(d.cards_json)),
+                "created_at": d.created_at.strftime('%b %d, %Y') if d.created_at else ""
+            }
+            for d in decks
+        ]
+    })
+
+@app.route('/api/flashcards/my-decks/<int:deck_id>', methods=['GET'])
+@login_required
+def get_flashcard_deck(deck_id):
+    deck = FlashcardDeck.query.filter_by(id=deck_id, user_id=current_user.id).first()
+    if not deck:
+        return jsonify({"success": False, "error": "Deck not found."}), 404
+    return jsonify({"success": True, "topic": deck.topic, "deck": json.loads(deck.cards_json)})
 
 def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_mime_type):
     with app_instance.app_context():

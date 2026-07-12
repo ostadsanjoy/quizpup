@@ -47,6 +47,13 @@ class QuizQuestion(db.Model):
     explanation = db.Column(db.Text, nullable=True) # Post-attempt feedback structure
     user_answer = db.Column(db.Integer, nullable=True)
 
+class FlashcardDeck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    topic = db.Column(db.String(255), nullable=False)
+    cards_json = db.Column(db.Text, nullable=False)  # JSON-encoded list of {question, answer}
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class SuperNote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
