@@ -721,7 +721,7 @@ def generate_ai_flashcards():
         required=["cards"]
     )
 
-    prompt = f"Create exactly 5 revision flashcards matching the core parameter topic context: '{topic}'. Keep answers concise."
+    prompt = f"Create 15 - 25 revision flashcards matching the core parameter topic context: '{topic}'. Keep answers concise."
     try:
         response = call_gemini(
             model=pick_model(),
