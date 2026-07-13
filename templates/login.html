@@ -23,6 +23,7 @@
         {% endwith %}
 
         <form method="POST" class="space-y-4 text-left">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Username</label>
                 <input type="text" name="username" required
@@ -59,7 +60,14 @@
             <div>
                 <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Password</label>
                 <input type="password" name="password" required
+                    {% if action == "Register" %}
+                    pattern="(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}"
+                    title="At least 8 characters, including a letter, a number, and a special character."
+                    {% endif %}
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
+                {% if action == "Register" %}
+                <p class="text-[10px] text-slate-400 mt-1">At least 8 characters, with a letter, a number, and a special character.</p>
+                {% endif %}
             </div>
 
             <div class="flex justify-between items-center mt-2 text-xs">

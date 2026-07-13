@@ -7,6 +7,7 @@ import re
 import random
 import threading
 import uuid
+import hmac
 import requests
 import base64
 import concurrent.futures
@@ -15,6 +16,7 @@ from dotenv import load_dotenv
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
@@ -33,7 +35,13 @@ from models import db, User, QuizSession, QuizQuestion, SuperNote, FlashcardDeck
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-this-in-production')
+_secret_key_env = os.environ.get('SECRET_KEY')
+if not _secret_key_env:
+    print("--- WARNING: SECRET_KEY is not set in the environment. Using an insecure "
+          "development fallback. Set a real SECRET_KEY before deploying — anyone who "
+          "knows the fallback value can forge session cookies, CSRF tokens, and "
+          "download links. ---")
+app.config['SECRET_KEY'] = _secret_key_env or 'dev-secret-key-change-this-in-production'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///quiz_saas.db')
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
@@ -42,11 +50,23 @@ app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
+# Session/cookie hardening — HttpOnly blocks JS access (XSS-stolen cookies),
+# SameSite=Lax blocks the cookie being sent on cross-site requests (CSRF),
+# Secure is only enabled in production since local dev runs over plain HTTP.
+IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('RENDER') is not None
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = IS_PRODUCTION
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+csrf = CSRFProtect(app)
 
 @login_manager.unauthorized_handler
 def handle_unauthorized():
@@ -360,6 +380,27 @@ def send_verification_email(target_email, otp_code):
 def generate_otp():
     return str(random.randint(100000, 999999))
 
+PASSWORD_PATTERN = re.compile(r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$')
+PASSWORD_REQUIREMENTS_MESSAGE = (
+    "Password must be at least 8 characters and include at least one letter, "
+    "one number, and one special character."
+)
+
+def is_password_strong(password):
+    return bool(password) and bool(PASSWORD_PATTERN.match(password))
+
+def otp_matches(submitted, expected):
+    if not submitted or not expected:
+        return False
+    return hmac.compare_digest(str(submitted), str(expected))
+
+def clear_email_change_state(user):
+    user.pending_email = None
+    user.email_change_otp = None
+    user.email_change_otp_expires = None
+    user.email_change_stage = None
+    user.email_change_attempts = 0
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -378,6 +419,10 @@ def register():
 
         if not email:
             flash('Email address is required.', 'danger')
+            return redirect(url_for('register'))
+
+        if not is_password_strong(password):
+            flash(PASSWORD_REQUIREMENTS_MESSAGE, 'danger')
             return redirect(url_for('register'))
 
         if User.query.filter_by(username=username).first():
@@ -461,7 +506,7 @@ def verify_email():
             flash('Too many incorrect attempts. Please request a new code.', 'danger')
         else:
             submitted_otp = request.form.get('otp')
-            if submitted_otp == user.verification_otp:
+            if otp_matches(submitted_otp, user.verification_otp):
                 user.is_verified = True
                 user.verification_otp = None
                 user.verification_otp_expires = None
@@ -577,20 +622,22 @@ def forgot_password():
     if request.method == 'POST':
         email = request.form.get('email')
         user = User.query.filter_by(email=email).first()
-        
+
         if user:
             otp_code = generate_otp()
             user.verification_otp = otp_code
             user.verification_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
+            user.password_reset_attempts = 0
             db.session.commit()
-            
             send_otp_email(email, otp_code)
-            session['reset_password_email'] = email
-            flash('A verification recovery code has been sent to your email address.', 'success')
-            return redirect(url_for('verify_otp'))
-        else:
-            flash('No active account found containing this email address.', 'danger')
-            
+
+        # Always show the same message and proceed to the same next step,
+        # regardless of whether the account exists — otherwise this endpoint
+        # can be used to enumerate which emails have registered accounts.
+        session['reset_password_email'] = email
+        flash('If an account exists for that email address, a verification code has been sent.', 'success')
+        return redirect(url_for('verify_otp'))
+
     return render_template('forgot_password.html')
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
@@ -598,30 +645,47 @@ def verify_otp():
     email = session.get('reset_password_email')
     if not email:
         return redirect(url_for('forgot_password'))
-        
+
     user = User.query.filter_by(email=email).first()
-    if not user:
-        return redirect(url_for('forgot_password'))
-        
+
     if request.method == 'POST':
         submitted_otp = request.form.get('otp')
         new_password = request.form.get('new_password')
-        
+
         if not submitted_otp or not new_password:
             flash('Both the verification code and chosen password fields are required.', 'danger')
             return render_template('verify_otp.html', email=email)
-        
-        if submitted_otp == user.verification_otp:
+
+        if not is_password_strong(new_password):
+            flash(PASSWORD_REQUIREMENTS_MESSAGE, 'danger')
+            return render_template('verify_otp.html', email=email)
+
+        # No matching account — show the same generic error as a wrong code,
+        # never reveal that the account doesn't exist.
+        if not user:
+            flash('Invalid or expired recovery code.', 'danger')
+            return render_template('verify_otp.html', email=email)
+
+        expired = (not user.verification_otp_expires) or datetime.utcnow() > user.verification_otp_expires
+        if expired:
+            flash('Your verification code expired. Please request a new one.', 'danger')
+        elif user.password_reset_attempts >= OTP_MAX_ATTEMPTS:
+            flash('Too many incorrect attempts. Please request a new code.', 'danger')
+        elif otp_matches(submitted_otp, user.verification_otp):
             user.password_hash = generate_password_hash(new_password, method='scrypt')
             user.verification_otp = None
+            user.verification_otp_expires = None
+            user.password_reset_attempts = 0
             db.session.commit()
-            
+
             session.pop('reset_password_email', None)
             flash('Your account security password has been updated successfully. Please login.', 'success')
             return redirect(url_for('login'))
         else:
-            flash('Invalid or active recovery code token mismatch.', 'danger')
-            
+            user.password_reset_attempts += 1
+            db.session.commit()
+            flash('Invalid or expired recovery code.', 'danger')
+
     return render_template('verify_otp.html', email=email)
 
 # ==========================================
@@ -654,14 +718,135 @@ def account():
 def profile():
     return render_template('dashboard.html', view="profile")
 
+@app.route('/profile/edit', methods=['GET'])
+@login_required
+def edit_profile_page():
+    return render_template('dashboard.html', view="edit_profile")
+
 @app.route('/profile/edit', methods=['POST'])
 @login_required
 def edit_profile():
-    current_user.first_name = request.form.get('first_name')
-    current_user.last_name = request.form.get('last_name')
-    current_user.phone = request.form.get('phone')
+    first_name = (request.form.get('first_name') or '').strip()[:100]
+    last_name = (request.form.get('last_name') or '').strip()[:100]
+    phone = (request.form.get('phone') or '').strip()[:20]
+
+    if not first_name or not last_name:
+        flash('First and last name are required.', 'danger')
+        return redirect(url_for('edit_profile_page'))
+
+    current_user.first_name = first_name
+    current_user.last_name = last_name
+    current_user.phone = phone
     db.session.commit()
+    flash('Your details have been updated.', 'success')
     return redirect(url_for('profile'))
+
+@app.route('/profile/email/request-change', methods=['POST'])
+@login_required
+def request_email_change():
+    new_email = (request.form.get('new_email') or '').strip().lower()
+
+    if not new_email or '@' not in new_email:
+        flash('Please enter a valid email address.', 'danger')
+        return redirect(url_for('edit_profile_page'))
+
+    if new_email == (current_user.email or '').lower():
+        flash('That is already your current email address.', 'danger')
+        return redirect(url_for('edit_profile_page'))
+
+    if User.query.filter(User.email.ilike(new_email)).first():
+        flash('That email address is already in use by another account.', 'danger')
+        return redirect(url_for('edit_profile_page'))
+
+    otp_code = generate_otp()
+    current_user.pending_email = new_email
+    current_user.email_change_otp = otp_code
+    current_user.email_change_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
+    current_user.email_change_stage = 'verify_current'
+    current_user.email_change_attempts = 0
+    db.session.commit()
+
+    send_email(
+        current_user.email,
+        "Confirm your QuizPup email change",
+        f"<p>We received a request to change the email on your QuizPup account to "
+        f"<strong>{escape(new_email)}</strong>.</p>"
+        f"<p>Your confirmation code is: <strong>{otp_code}</strong></p>"
+        f"<p>If you didn't request this, you can safely ignore this email — your "
+        f"address won't change without this code.</p>"
+    )
+    flash(f'A confirmation code has been sent to your current email ({current_user.email}).', 'success')
+    return redirect(url_for('edit_profile_page'))
+
+@app.route('/profile/email/verify', methods=['POST'])
+@login_required
+def verify_email_change():
+    submitted_otp = request.form.get('otp')
+
+    if not current_user.pending_email or not current_user.email_change_stage:
+        flash('No pending email change found.', 'danger')
+        return redirect(url_for('edit_profile_page'))
+
+    expired = (not current_user.email_change_otp_expires) or datetime.utcnow() > current_user.email_change_otp_expires
+    if expired:
+        flash('That code has expired. Please start the email change again.', 'danger')
+        clear_email_change_state(current_user)
+        db.session.commit()
+        return redirect(url_for('edit_profile_page'))
+
+    if current_user.email_change_attempts >= OTP_MAX_ATTEMPTS:
+        flash('Too many incorrect attempts. Please start the email change again.', 'danger')
+        clear_email_change_state(current_user)
+        db.session.commit()
+        return redirect(url_for('edit_profile_page'))
+
+    if not otp_matches(submitted_otp, current_user.email_change_otp):
+        current_user.email_change_attempts += 1
+        db.session.commit()
+        flash('Incorrect code. Please try again.', 'danger')
+        return redirect(url_for('edit_profile_page'))
+
+    if current_user.email_change_stage == 'verify_current':
+        # Current email confirmed — now verify ownership of the new address
+        otp_code = generate_otp()
+        current_user.email_change_otp = otp_code
+        current_user.email_change_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
+        current_user.email_change_stage = 'verify_new'
+        current_user.email_change_attempts = 0
+        db.session.commit()
+
+        send_email(
+            current_user.pending_email,
+            "Verify your new QuizPup email address",
+            f"<p>Your verification code to confirm this as your new QuizPup email "
+            f"address is: <strong>{otp_code}</strong></p>"
+        )
+        flash(f'Confirmed. A verification code has been sent to your new email ({current_user.pending_email}).', 'success')
+        return redirect(url_for('edit_profile_page'))
+
+    elif current_user.email_change_stage == 'verify_new':
+        # Guard against the address being claimed by someone else mid-flow
+        if User.query.filter(User.email.ilike(current_user.pending_email), User.id != current_user.id).first():
+            flash('That email address was just claimed by another account. Please try a different address.', 'danger')
+            clear_email_change_state(current_user)
+            db.session.commit()
+            return redirect(url_for('edit_profile_page'))
+
+        current_user.email = current_user.pending_email
+        clear_email_change_state(current_user)
+        db.session.commit()
+        flash('Your email address has been updated successfully.', 'success')
+        return redirect(url_for('profile'))
+
+    return redirect(url_for('edit_profile_page'))
+
+@app.route('/profile/email/cancel', methods=['POST'])
+@login_required
+def cancel_email_change():
+    clear_email_change_state(current_user)
+    db.session.commit()
+    flash('Email change cancelled.', 'success')
+    return redirect(url_for('edit_profile_page'))
 
 # ==========================================
 #        NEW FLASHCARD & STUDY ASYNC APIs

@@ -18,6 +18,12 @@ class User(UserMixin, db.Model):
     verification_otp = db.Column(db.String(6), nullable=True)
     verification_otp_expires = db.Column(db.DateTime, nullable=True)
     verification_attempts = db.Column(db.Integer, default=0)
+    password_reset_attempts = db.Column(db.Integer, default=0)
+    pending_email = db.Column(db.String(150), nullable=True)
+    email_change_otp = db.Column(db.String(6), nullable=True)
+    email_change_otp_expires = db.Column(db.DateTime, nullable=True)
+    email_change_stage = db.Column(db.String(20), nullable=True)
+    email_change_attempts = db.Column(db.Integer, default=0)
 
 class QuizSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
