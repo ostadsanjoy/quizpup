@@ -1354,7 +1354,7 @@ def sync_missing_columns():
                 continue
             col_type = column.type.compile(dialect=db.engine.dialect)
             with db.engine.connect() as conn:
-                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}'))
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'))
                 conn.commit()
 
 with app.app_context():
