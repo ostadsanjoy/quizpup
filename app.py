@@ -5,6 +5,8 @@ import json
 import math
 import re
 import random
+import logging
+import secrets
 import threading
 import uuid
 import hmac
@@ -14,9 +16,11 @@ import concurrent.futures
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_file, g
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
@@ -28,19 +32,42 @@ from google import genai
 from google.genai import types
 from supabase import create_client, Client
 from flashcard_data import PRELOADED_DECKS
+import filetype
 
 from sqlalchemy import inspect, text
 from models import db, User, QuizSession, QuizQuestion, SuperNote, FlashcardDeck
 
 load_dotenv()
 
+# ==========================================
+#          LOGGING (server-side only)
+# ==========================================
+# Full exception detail goes here, never into a JSON response — API error
+# payloads are sanitized (see handle_uncaught_exception) so internal paths,
+# DB errors, and stack traces can't leak to the client.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
+logger = logging.getLogger("quizpup")
+
 app = Flask(__name__)
+
+IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('RENDER') is not None
+
 _secret_key_env = os.environ.get('SECRET_KEY')
 if not _secret_key_env:
-    print("--- WARNING: SECRET_KEY is not set in the environment. Using an insecure "
-          "development fallback. Set a real SECRET_KEY before deploying — anyone who "
-          "knows the fallback value can forge session cookies, CSRF tokens, and "
-          "download links. ---")
+    if IS_PRODUCTION:
+        # A guessable/shared SECRET_KEY lets anyone forge session cookies, CSRF
+        # tokens, and signed download links — refuse to boot in production
+        # rather than run with a known-insecure fallback.
+        raise RuntimeError(
+            "SECRET_KEY environment variable is not set. Refusing to start in "
+            "production with an insecure fallback key. Set SECRET_KEY to a long "
+            "random value (e.g. `python -c \"import secrets; print(secrets.token_hex(32))\"`)."
+        )
+    print("--- WARNING: SECRET_KEY is not set. Using an insecure development-only "
+          "fallback. This is only acceptable for local dev. ---")
 app.config['SECRET_KEY'] = _secret_key_env or 'dev-secret-key-change-this-in-production'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///quiz_saas.db')
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
@@ -53,7 +80,6 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 # Session/cookie hardening — HttpOnly blocks JS access (XSS-stolen cookies),
 # SameSite=Lax blocks the cookie being sent on cross-site requests (CSRF),
 # Secure is only enabled in production since local dev runs over plain HTTP.
-IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('RENDER') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = IS_PRODUCTION
@@ -63,10 +89,100 @@ app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# ==========================================
+#          UPLOAD VALIDATION
+# ==========================================
+# Extension check is just a fast first filter — the real check is the magic-byte
+# sniff below, since a client can name any file "notes.pdf".
+ALLOWED_NOTE_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.webp'}
+ALLOWED_NOTE_KINDS = {'pdf', 'jpg', 'jpeg', 'png', 'webp'}
+
+def is_allowed_upload_content(filepath, expect_pdf):
+    """Sniff the file's actual magic bytes rather than trusting the filename
+    extension or client-supplied Content-Type, either of which is trivial to
+    spoof (e.g. renaming a script to notes.pdf)."""
+    kind = filetype.guess(filepath)
+    if kind is None:
+        return False
+    if kind.extension not in ALLOWED_NOTE_KINDS:
+        return False
+    if expect_pdf and kind.extension != 'pdf':
+        return False
+    if not expect_pdf and kind.extension == 'pdf':
+        return False
+    return True
+
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 csrf = CSRFProtect(app)
+
+# ==========================================
+#          RATE LIMITING
+# ==========================================
+# In-memory storage is fine for a single Gunicorn worker. If this app ever
+# scales to multiple workers/dynos, limits must move to a shared store
+# (e.g. Redis: storage_uri="redis://...") or each worker enforces its own
+# separate counter, effectively multiplying the real limit.
+RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
+if RATELIMIT_STORAGE_URI == 'memory://' and IS_PRODUCTION:
+    print("--- WARNING: Rate limiting is using in-process memory storage in "
+          "production. If Gunicorn runs more than one worker, set "
+          "RATELIMIT_STORAGE_URI to a shared Redis instance or these limits "
+          "are effectively multiplied by the worker count. ---")
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    storage_uri=RATELIMIT_STORAGE_URI,
+    default_limits=["200 per hour"],
+    headers_enabled=True,
+)
+
+# ==========================================
+#          SECURITY HEADERS
+# ==========================================
+# Templates use several inline <script> blocks (no external src), so a
+# blanket 'unsafe-inline' would gut the point of the CSP. Instead every
+# request gets a fresh random nonce; templates tag their inline <script>
+# blocks with nonce="{{ csp_nonce() }}" and only those exact tags are
+# allowed to run. Inline style="" attributes are extremely common in these
+# templates and CSP has no practical nonce mechanism for style attributes,
+# so style-src still allows 'unsafe-inline' — a deliberate, narrower
+# trade-off (inline-style injection is a much lower-severity primitive
+# than inline-script injection).
+@app.before_request
+def _set_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+@app.context_processor
+def _inject_csp_nonce():
+    return {"csp_nonce": lambda: g.csp_nonce}
+
+@app.after_request
+def set_security_headers(response):
+    nonce = getattr(g, 'csp_nonce', '')
+    csp = (
+        "default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "font-src 'self' data: https://cdn.jsdelivr.net; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "object-src 'none'"
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=(), payment=()'
+    response.headers['Content-Security-Policy'] = csp
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    if IS_PRODUCTION:
+        response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains; preload'
+    return response
 
 @login_manager.unauthorized_handler
 def handle_unauthorized():
@@ -337,7 +453,7 @@ def load_user(user_id):
 
 def send_email(target_email, subject, html_body):
     if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
-        print("--- ERROR: BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable is missing! ---")
+        logger.error("BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable is missing!")
         return False
 
     try:
@@ -408,6 +524,7 @@ def index():
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("10 per hour")
 def register():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -467,7 +584,7 @@ def register():
                 }
             })
         except Exception as e:
-            print(f"Supabase sign_up notice: {str(e)}")
+            logger.warning("Supabase sign_up notice: %s", str(e))
 
         session['pending_verification_user_id'] = new_user.id
 
@@ -481,6 +598,7 @@ def register():
     return render_template('login.html', action="Register")
 
 @app.route('/verify-email', methods=['GET', 'POST'])
+@limiter.limit("15 per hour")
 def verify_email():
     user_id = session.get('pending_verification_user_id')
     if not user_id:
@@ -524,6 +642,7 @@ def verify_email():
     return render_template('verify_email.html', email=user.email)
 
 @app.route('/verify-email/resend', methods=['POST'])
+@limiter.limit("5 per hour")
 def resend_verification_email():
     user_id = session.get('pending_verification_user_id')
     if not user_id:
@@ -548,6 +667,7 @@ def resend_verification_email():
     return redirect(url_for('verify_email'))
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute; 50 per hour")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
@@ -566,7 +686,7 @@ def login():
             try:
                 supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
             except Exception as sb_err:
-                print(f"Supabase sign_in notice: {str(sb_err)}")
+                logger.warning("Supabase sign_in notice: %s", str(sb_err))
 
             session.permanent = True
             login_user(user, remember=True)
@@ -600,6 +720,7 @@ def ping_server():
 # ==========================================
 
 @app.route('/forgot-username', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
 def forgot_username():
     if request.method == 'POST':
         email = request.form.get('email')
@@ -618,6 +739,7 @@ def forgot_username():
     return render_template('forgot_username.html')
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
 def forgot_password():
     if request.method == 'POST':
         email = request.form.get('email')
@@ -641,6 +763,7 @@ def forgot_password():
     return render_template('forgot_password.html')
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
+@limiter.limit("15 per hour")
 def verify_otp():
     email = session.get('reset_password_email')
     if not email:
@@ -743,6 +866,7 @@ def edit_profile():
 
 @app.route('/profile/email/request-change', methods=['POST'])
 @login_required
+@limiter.limit("5 per hour")
 def request_email_change():
     new_email = (request.form.get('new_email') or '').strip().lower()
 
@@ -780,6 +904,7 @@ def request_email_change():
 
 @app.route('/profile/email/verify', methods=['POST'])
 @login_required
+@limiter.limit("15 per hour")
 def verify_email_change():
     submitted_otp = request.form.get('otp')
 
@@ -882,6 +1007,7 @@ def preload_flashcards():
 
 @app.route('/api/flashcards/generate', methods=['POST'])
 @login_required
+@limiter.limit("20 per hour")
 def generate_ai_flashcards():
     data = request.get_json() or {}
     topic = data.get('topic', '')
@@ -930,7 +1056,8 @@ def generate_ai_flashcards():
 
         return jsonify({"success": True, "deck": cards, "deck_id": saved_deck.id})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception("AI flashcard generation failed for user %s", current_user.id)
+        return jsonify({"success": False, "error": "Could not generate flashcards right now. Please try again shortly."}), 500
 
 @app.route('/api/flashcards/my-decks', methods=['GET'])
 @login_required
@@ -1013,14 +1140,16 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
             note.status = "complete"
             db.session.commit()
         except Exception as e:
+            logger.exception("SuperNotes job failed for note %s", note_id)
             if os.path.exists(filepath):
                 os.remove(filepath)
             note.status = "failed"
-            note.error_message = str(e)
+            note.error_message = "We couldn't process this file. Please try a clearer scan or a different file."
             db.session.commit()
 
 @app.route('/api/study/process-notes', methods=['POST'])
 @login_required
+@limiter.limit("15 per hour")
 def process_study_notes():
     if 'note_file' not in request.files:
         return jsonify({"success": False, "error": "Payload key mismatch."}), 400
@@ -1030,6 +1159,9 @@ def process_study_notes():
         return jsonify({"success": False, "error": "Empty filename."}), 400
 
     filename = secure_filename(file.filename)
+    if not filename.lower().endswith(tuple(ALLOWED_NOTE_EXTENSIONS)):
+        return jsonify({"success": False, "error": "Unsupported file type. Please upload a PDF, JPG, PNG, or WEBP file."}), 400
+
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{filename}")
     is_pdf = filename.lower().endswith('.pdf')
     file_mime_type = file.content_type
@@ -1037,7 +1169,14 @@ def process_study_notes():
     try:
         file.save(filepath)
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception("Failed to save uploaded note file")
+        return jsonify({"success": False, "error": "Could not save the uploaded file. Please try again."}), 500
+
+    # Trust the file's actual bytes, not the client-supplied extension/Content-Type —
+    # both are trivial for a client to spoof (e.g. an executable renamed to .pdf).
+    if not is_allowed_upload_content(filepath, is_pdf):
+        os.remove(filepath)
+        return jsonify({"success": False, "error": "That file's contents don't match a supported PDF or image format."}), 400
 
     note_title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ').strip() or "Untitled Note"
     note = SuperNote(user_id=current_user.id, title=note_title, status="processing")
@@ -1132,28 +1271,42 @@ def supernotes_download(note_id):
 
 @app.route('/generate-quiz', methods=['POST'])
 @login_required
+@limiter.limit("20 per hour")
 def generate_quiz():
     topic = request.form.get('topic')
     difficulty = request.form.get('difficulty', 'easy')
-    total_q = int(request.form.get('total_questions', 10))
-    duration = int(request.form.get('duration', 10))
-    
+    try:
+        total_q = int(request.form.get('total_questions', 10))
+        duration = int(request.form.get('duration', 10))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Questions and duration must be numbers."}), 400
+
     if total_q < 10 or total_q > 200:
         return jsonify({"error": "Questions must stay between 10 and 200 items."}), 400
+    if duration < 1 or duration > 300:
+        return jsonify({"error": "Duration must be between 1 and 300 minutes."}), 400
 
     source_text = ""
     if 'pdf_file' in request.files and request.files['pdf_file'].filename != '':
         file = request.files['pdf_file']
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({"error": "Please upload a PDF file."}), 400
         safe_name = secure_filename(file.filename) or "upload.pdf"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{safe_name}")
         file.save(filepath)
+        if not is_allowed_upload_content(filepath, expect_pdf=True):
+            os.remove(filepath)
+            return jsonify({"error": "That file's contents don't match a valid PDF."}), 400
         try:
             reader = PdfReader(filepath)
             for page in reader.pages:
                 source_text += page.extract_text() or ""
             os.remove(filepath)
         except Exception as e:
-            return jsonify({"error": f"Failed to parse target PDF data: {str(e)}"}), 400
+            logger.exception("Failed to parse uploaded quiz-source PDF")
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({"error": "Could not read that PDF. Please try a different file."}), 400
 
     if difficulty == 'easy':
         hints_allowed = -1
@@ -1268,7 +1421,8 @@ def generate_quiz():
 
         return jsonify({"success": True, "session_id": quiz_session_instance.id})
     except Exception as e:
-        return jsonify({"error": f"Framework Failure: {str(e)}"}), 500
+        logger.exception("Quiz generation failed for user %s", current_user.id)
+        return jsonify({"error": "Could not generate the quiz right now. Please try again shortly."}), 500
 
 # ==========================================
 #          RUNNING EXAMINATION INTERFACE
@@ -1375,9 +1529,15 @@ def handle_uncaught_exception(e):
         if request.path.startswith('/api/'):
             return jsonify({"success": False, "error": e.description}), e.code
         return e
+    logger.exception("Unhandled exception on %s", request.path)
     if request.path.startswith('/api/'):
-        return jsonify({"success": False, "error": f"Unhandled server error: {str(e)}"}), 500
+        return jsonify({"success": False, "error": "An unexpected server error occurred. Please try again."}), 500
     raise e
 
 if __name__ == '__main__':
-    app.run(debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    if debug_mode and IS_PRODUCTION:
+        # Flask's debug mode exposes an interactive in-browser debugger that can
+        # execute arbitrary Python — never allow it to run where IS_PRODUCTION.
+        raise RuntimeError("FLASK_DEBUG=true is not allowed when running in production.")
+    app.run(debug=debug_mode)

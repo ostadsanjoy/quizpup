@@ -398,7 +398,7 @@
     .card-flipped .deck-inner-wrapper { transform: rotateY(180deg); }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
     localStorage.setItem('isLoggedIn', 'true');
     const logoutBtn = document.querySelector('a[href="/logout"]');
     if (logoutBtn) {

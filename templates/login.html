@@ -91,7 +91,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
     if (window.location.pathname === '/login') {
         localStorage.removeItem('isLoggedIn');
     }

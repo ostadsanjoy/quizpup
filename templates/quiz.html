@@ -45,7 +45,7 @@
     <button onclick="revealExplanationsWorkflow()" class="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-lg hover:bg-indigo-700 transition text-sm">Review Answers & Explanations</button>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 let questionDeck = [];
 let cursor = 0;
 let savedAnswers = {};
