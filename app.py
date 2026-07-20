@@ -22,6 +22,7 @@ from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
@@ -39,12 +40,6 @@ from models import db, User, QuizSession, QuizQuestion, SuperNote, FlashcardDeck
 
 load_dotenv()
 
-# ==========================================
-#          LOGGING (server-side only)
-# ==========================================
-# Full exception detail goes here, never into a JSON response — API error
-# payloads are sanitized (see handle_uncaught_exception) so internal paths,
-# DB errors, and stack traces can't leak to the client.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -55,12 +50,12 @@ app = Flask(__name__)
 
 IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('RENDER') is not None
 
+if IS_PRODUCTION:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 _secret_key_env = os.environ.get('SECRET_KEY')
 if not _secret_key_env:
     if IS_PRODUCTION:
-        # A guessable/shared SECRET_KEY lets anyone forge session cookies, CSRF
-        # tokens, and signed download links — refuse to boot in production
-        # rather than run with a known-insecure fallback.
         raise RuntimeError(
             "SECRET_KEY environment variable is not set. Refusing to start in "
             "production with an insecure fallback key. Set SECRET_KEY to a long "
@@ -77,9 +72,6 @@ app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-# Session/cookie hardening — HttpOnly blocks JS access (XSS-stolen cookies),
-# SameSite=Lax blocks the cookie being sent on cross-site requests (CSRF),
-# Secure is only enabled in production since local dev runs over plain HTTP.
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = IS_PRODUCTION
@@ -89,18 +81,10 @@ app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# ==========================================
-#          UPLOAD VALIDATION
-# ==========================================
-# Extension check is just a fast first filter — the real check is the magic-byte
-# sniff below, since a client can name any file "notes.pdf".
 ALLOWED_NOTE_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.webp'}
 ALLOWED_NOTE_KINDS = {'pdf', 'jpg', 'jpeg', 'png', 'webp'}
 
 def is_allowed_upload_content(filepath, expect_pdf):
-    """Sniff the file's actual magic bytes rather than trusting the filename
-    extension or client-supplied Content-Type, either of which is trivial to
-    spoof (e.g. renaming a script to notes.pdf)."""
     kind = filetype.guess(filepath)
     if kind is None:
         return False
@@ -117,13 +101,6 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 csrf = CSRFProtect(app)
 
-# ==========================================
-#          RATE LIMITING
-# ==========================================
-# In-memory storage is fine for a single Gunicorn worker. If this app ever
-# scales to multiple workers/dynos, limits must move to a shared store
-# (e.g. Redis: storage_uri="redis://...") or each worker enforces its own
-# separate counter, effectively multiplying the real limit.
 RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
 if RATELIMIT_STORAGE_URI == 'memory://' and IS_PRODUCTION:
     print("--- WARNING: Rate limiting is using in-process memory storage in "
@@ -139,18 +116,6 @@ limiter = Limiter(
     headers_enabled=True,
 )
 
-# ==========================================
-#          SECURITY HEADERS
-# ==========================================
-# Templates use several inline <script> blocks (no external src), so a
-# blanket 'unsafe-inline' would gut the point of the CSP. Instead every
-# request gets a fresh random nonce; templates tag their inline <script>
-# blocks with nonce="{{ csp_nonce() }}" and only those exact tags are
-# allowed to run. Inline style="" attributes are extremely common in these
-# templates and CSP has no practical nonce mechanism for style attributes,
-# so style-src still allows 'unsafe-inline' — a deliberate, narrower
-# trade-off (inline-style injection is a much lower-severity primitive
-# than inline-script injection).
 @app.before_request
 def _set_csp_nonce():
     g.csp_nonce = secrets.token_urlsafe(16)
@@ -712,6 +677,7 @@ def logout():
     return response
 
 @app.route('/ping', methods=['GET'])
+@limiter.exempt
 def ping_server():
     return jsonify({"status": "healthy", "message": "Stay awake, pup!"}), 200
 
@@ -1172,8 +1138,6 @@ def process_study_notes():
         logger.exception("Failed to save uploaded note file")
         return jsonify({"success": False, "error": "Could not save the uploaded file. Please try again."}), 500
 
-    # Trust the file's actual bytes, not the client-supplied extension/Content-Type —
-    # both are trivial for a client to spoof (e.g. an executable renamed to .pdf).
     if not is_allowed_upload_content(filepath, is_pdf):
         os.remove(filepath)
         return jsonify({"success": False, "error": "That file's contents don't match a supported PDF or image format."}), 400
@@ -1523,6 +1487,14 @@ def handle_file_too_large(e):
         return jsonify({"success": False, "error": message}), 413
     return message, 413
 
+@app.errorhandler(429)
+def handle_rate_limit(e):
+    message = "You're doing that a bit too fast — please wait a moment and try again."
+    if request.path.startswith('/api/'):
+        return jsonify({"success": False, "error": message}), 429
+    flash(message, 'error')
+    return redirect(request.referrer or url_for('home'))
+
 @app.errorhandler(Exception)
 def handle_uncaught_exception(e):
     if isinstance(e, HTTPException):
@@ -1537,7 +1509,5 @@ def handle_uncaught_exception(e):
 if __name__ == '__main__':
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     if debug_mode and IS_PRODUCTION:
-        # Flask's debug mode exposes an interactive in-browser debugger that can
-        # execute arbitrary Python — never allow it to run where IS_PRODUCTION.
         raise RuntimeError("FLASK_DEBUG=true is not allowed when running in production.")
     app.run(debug=debug_mode)
