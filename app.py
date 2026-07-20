@@ -130,6 +130,7 @@ def set_security_headers(response):
     csp = (
         "default-src 'self'; "
         f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
+        "script-src-attr 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "font-src 'self' data: https://cdn.jsdelivr.net; "
         "img-src 'self' data: blob:; "
