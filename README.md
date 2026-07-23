@@ -94,6 +94,16 @@ quiz-app/
 | SuperNotes | `/api/study/process-notes`, `/api/study/notes/history`, `/api/study/notes/<id>`, `/api/study/notes/<id>/pdf` |
 | Quiz | `/generate-quiz`, `/quiz/<session_id>`, `/api/quiz/<session_id>/questions`, `/api/quiz/<session_id>/submit` |
 
+## Future Plans
+
+### Upcoming features
+- **Generating flashcards from notes:** Students will be able to generate flahcards by uploading images or pdfs of the notes that they want to generate flashcards of.
+- **AI tutor:** Helping students in their study with visual learning and interactive elements.
+- **Student Helpline:** Helping students in their difficulties both academically and mentally. We as a company feel that no student should suffer or feel burdened due to education. We will be connecting students to specialists who can help guide them in the right direstion and suggest them alternatives by analyzing their info. 
+
+### App Launch
+We are actively working towards delivering the final fully running version one **(V1.0)** of the app to the public by **August 15, 2026**. 
+
 ## License
 
 Personal project of Creator: **Sanjoy Ostad**
