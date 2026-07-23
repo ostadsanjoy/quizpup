@@ -35,7 +35,7 @@ from supabase import create_client, Client
 from flashcard_data import PRELOADED_DECKS
 import filetype
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func
 from models import db, User, QuizSession, QuizQuestion, SuperNote, FlashcardDeck
 
 load_dotenv()
@@ -124,6 +124,10 @@ def _set_csp_nonce():
 def _inject_csp_nonce():
     return {"csp_nonce": lambda: g.csp_nonce}
 
+@app.context_processor
+def _inject_supabase_config():
+    return {"supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY}
+
 @app.after_request
 def set_security_headers(response):
     nonce = getattr(g, 'csp_nonce', '')
@@ -134,7 +138,7 @@ def set_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "font-src 'self' data: https://cdn.jsdelivr.net; "
         "img-src 'self' data: blob:; "
-        "connect-src 'self'; "
+        f"connect-src 'self' {SUPABASE_URL or ''}; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'; "
@@ -210,6 +214,7 @@ def call_gemini(**kwargs):
     raise last_error
 
 SUPERNOTE_CHUNK_CHAR_LIMIT = 8000
+SUPERNOTE_MAX_PDF_PAGES = 60
 CHAPTER_HEADING_PATTERN = re.compile(r'(?im)^\s*(chapter|part|unit)\s+([0-9]+|[ivxlcdm]+)\b.*$')
 
 def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
@@ -404,6 +409,7 @@ def verify_download_token(token, note_id):
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
@@ -639,10 +645,10 @@ def login():
         return redirect(url_for('home'))
 
     if request.method == 'POST':
-        username = request.form.get('username')
+        email = (request.form.get('email') or '').strip()
         password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        
+        user = User.query.filter(func.lower(User.email) == email.lower()).first()
+
         if user and check_password_hash(user.password_hash, password):
             if not user.is_verified:
                 session['pending_verification_user_id'] = user.id
@@ -658,7 +664,7 @@ def login():
             login_user(user, remember=True)
             return redirect(url_for('home'))
         else:
-            flash('Invalid username or password.', 'danger')       
+            flash('Invalid email or password.', 'danger')       
             
     return render_template('login.html', action="Login")
 
@@ -677,6 +683,107 @@ def logout():
     
     return response
 
+@app.route('/auth/callback', methods=['GET'])
+def oauth_callback_page():
+    return render_template('oauth_callback.html')
+
+@app.route('/auth/callback', methods=['POST'])
+@limiter.limit("20 per hour")
+def oauth_callback_exchange():
+    data = request.get_json() or {}
+    access_token = data.get('access_token')
+    if not access_token:
+        return jsonify({"success": False, "error": "Missing session token."}), 400
+
+    try:
+        auth_response = supabase_client.auth.get_user(access_token)
+        supa_user = auth_response.user
+    except Exception:
+        logger.exception("Supabase token verification failed")
+        return jsonify({"success": False, "error": "Could not verify your session. Please try signing in again."}), 401
+
+    if not supa_user or not supa_user.email:
+        return jsonify({"success": False, "error": "Could not verify your session. Please try signing in again."}), 401
+
+    try:
+        provider = (supa_user.app_metadata or {}).get('provider', 'oauth')
+        metadata = supa_user.user_metadata or {}
+        supa_uid = supa_user.id
+        email = supa_user.email
+
+        existing = User.query.filter_by(supabase_uid=supa_uid).first()
+        if not existing:
+            existing = User.query.filter(func.lower(User.email) == email.lower()).first()
+            if existing and not existing.supabase_uid:
+                existing.supabase_uid = supa_uid
+                db.session.commit()
+
+        if existing:
+            login_user(existing, remember=True)
+            return jsonify({"success": True, "redirect": url_for('home')})
+
+        full_name = metadata.get('full_name') or metadata.get('name') or ''
+        name_parts = full_name.strip().split(' ', 1)
+        session['pending_oauth'] = {
+            "supabase_uid": supa_uid,
+            "email": email,
+            "provider": provider,
+            "first_name": metadata.get('given_name') or (name_parts[0] if name_parts else ''),
+            "last_name": metadata.get('family_name') or (name_parts[1] if len(name_parts) > 1 else ''),
+            "suggested_username": metadata.get('user_name') or metadata.get('preferred_username') or ''
+        }
+        return jsonify({"success": True, "redirect": url_for('complete_oauth_profile_page')})
+    except Exception:
+        logger.exception("OAuth callback failed while linking/creating the local user record")
+        return jsonify({"success": False, "error": "Something went wrong finishing sign-in. Please try again."}), 500
+
+@app.route('/auth/complete-profile', methods=['GET'])
+def complete_oauth_profile_page():
+    pending = session.get('pending_oauth')
+    if not pending:
+        flash('Please sign in again to continue.', 'error')
+        return redirect(url_for('login'))
+    return render_template('complete_profile.html', pending=pending)
+
+@app.route('/auth/complete-profile', methods=['POST'])
+@limiter.limit("10 per hour")
+def complete_oauth_profile_submit():
+    pending = session.get('pending_oauth')
+    if not pending:
+        flash('Please sign in again to continue.', 'error')
+        return redirect(url_for('login'))
+
+    username = (request.form.get('username') or '').strip()
+    first_name = (request.form.get('first_name') or '').strip()[:100]
+    last_name = (request.form.get('last_name') or '').strip()[:100]
+    phone = (request.form.get('phone') or '').strip()[:20]
+
+    if not username or not first_name or not last_name or not phone:
+        flash('Please fill in all fields to finish setting up your account.', 'error')
+        return render_template('complete_profile.html', pending=pending)
+
+    if User.query.filter_by(username=username).first():
+        flash('That username is already taken. Please choose another.', 'error')
+        return render_template('complete_profile.html', pending=pending)
+
+    new_user = User(
+        username=username,
+        password_hash=generate_password_hash(secrets.token_urlsafe(32)),
+        first_name=first_name,
+        last_name=last_name,
+        email=pending['email'],
+        phone=phone,
+        is_verified=True,
+        supabase_uid=pending['supabase_uid'],
+        auth_provider=pending['provider']
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+    session.pop('pending_oauth', None)
+    login_user(new_user, remember=True)
+    return redirect(url_for('home'))
+
 @app.route('/ping', methods=['GET'])
 @limiter.exempt
 def ping_server():
@@ -685,25 +792,6 @@ def ping_server():
 # ==========================================
 #          PASSWORD RECOVERY ROUTES
 # ==========================================
-
-@app.route('/forgot-username', methods=['GET', 'POST'])
-@limiter.limit("5 per hour")
-def forgot_username():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        user = User.query.filter_by(email=email).first()
-        
-        if user:
-            send_email(
-                email,
-                "Your QuizPup Username Reminder",
-                f"<p>Hello,</p><p>You requested a username reminder. Your account username identifier is: <strong>{user.username}</strong></p><p>Have a great study session!</p>"
-            )
-            flash('Username reminder message successfully dispatched to your email address.', 'success')
-        else:
-            flash(f'No accounts related to {email}', 'danger')
-            
-    return render_template('forgot_username.html')
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 @limiter.limit("5 per hour")
@@ -977,9 +1065,11 @@ def preload_flashcards():
 @limiter.limit("20 per hour")
 def generate_ai_flashcards():
     data = request.get_json() or {}
-    topic = data.get('topic', '')
+    topic = (data.get('topic') or '').strip()
     if not topic:
         return jsonify({"success": False, "error": "Topic argument is completely missing."}), 400
+    if len(topic) > 300:
+        return jsonify({"success": False, "error": "Topic is too long. Please keep it under 300 characters."}), 400
 
     fc_schema = types.Schema(
         type=types.Type.OBJECT,
@@ -1143,6 +1233,16 @@ def process_study_notes():
         os.remove(filepath)
         return jsonify({"success": False, "error": "That file's contents don't match a supported PDF or image format."}), 400
 
+    if is_pdf:
+        try:
+            page_count = len(PdfReader(filepath).pages)
+        except Exception:
+            os.remove(filepath)
+            return jsonify({"success": False, "error": "Could not read that PDF. Please try a different file."}), 400
+        if page_count > SUPERNOTE_MAX_PDF_PAGES:
+            os.remove(filepath)
+            return jsonify({"success": False, "error": f"That PDF has {page_count} pages. Please upload {SUPERNOTE_MAX_PDF_PAGES} pages or fewer at a time."}), 400
+
     note_title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ').strip() or "Untitled Note"
     note = SuperNote(user_id=current_user.id, title=note_title, status="processing")
     db.session.add(note)
@@ -1238,7 +1338,7 @@ def supernotes_download(note_id):
 @login_required
 @limiter.limit("20 per hour")
 def generate_quiz():
-    topic = request.form.get('topic')
+    topic = (request.form.get('topic') or '').strip()
     difficulty = request.form.get('difficulty', 'easy')
     try:
         total_q = int(request.form.get('total_questions', 10))
@@ -1250,6 +1350,11 @@ def generate_quiz():
         return jsonify({"error": "Questions must stay between 10 and 200 items."}), 400
     if duration < 1 or duration > 300:
         return jsonify({"error": "Duration must be between 1 and 300 minutes."}), 400
+    if len(topic) > 300:
+        return jsonify({"error": "Topic is too long. Please keep it under 300 characters."}), 400
+    has_pdf_upload = 'pdf_file' in request.files and request.files['pdf_file'].filename != ''
+    if not topic and not has_pdf_upload:
+        return jsonify({"error": "Please provide a topic or upload a source PDF."}), 400
 
     source_text = ""
     if 'pdf_file' in request.files and request.files['pdf_file'].filename != '':
@@ -1443,12 +1548,18 @@ def submit_quiz(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
     if session_instance.user_id != current_user.id:
         return jsonify({"error": "Not authorized"}), 403
-        
+
+    if session_instance.is_completed:
+        return jsonify({"score": session_instance.score, "total": session_instance.total_questions, "recommendation": session_instance.recommendation})
+
     data = request.json.get('answers', {})
     score = 0
     for q in session_instance.questions:
         user_ans = data.get(str(q.id))
-        user_ans_int = int(user_ans) if user_ans is not None else None
+        try:
+            user_ans_int = int(user_ans) if user_ans is not None else None
+        except (TypeError, ValueError):
+            user_ans_int = None
         q.user_answer = user_ans_int
         if user_ans_int == q.correct_option:
             score += 1

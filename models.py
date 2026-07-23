@@ -24,6 +24,8 @@ class User(UserMixin, db.Model):
     email_change_otp_expires = db.Column(db.DateTime, nullable=True)
     email_change_stage = db.Column(db.String(20), nullable=True)
     email_change_attempts = db.Column(db.Integer, default=0)
+    supabase_uid = db.Column(db.String(255), unique=True, nullable=True)
+    auth_provider = db.Column(db.String(20), default="password", nullable=True)
 
 class QuizSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
