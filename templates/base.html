@@ -152,7 +152,8 @@
             {% block content %}{% endblock %}
         </main>
 
-        {% if current_user.is_authenticated %}
+        {% if current_user.is_authenticated and not hide_bottom_nav and view != 'quiz' %}
+
         <nav class="bottom-nav-bar">
 
             <a href="/home" class="flex flex-col items-center transition transform active:scale-95">

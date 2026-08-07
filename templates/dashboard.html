@@ -358,13 +358,9 @@
         <div class="pt-4 border-t border-slate-100 space-y-3">
             <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Email Address</span>
 
-            {% if current_user.email_change_stage %}
+            {% if current_user.pending_email %}
             <div class="bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl p-4 space-y-3">
-                {% if current_user.email_change_stage == 'verify_current' %}
-                <p class="text-xs text-slate-600">Enter the code sent to your current email (<strong>{{ current_user.email }}</strong>) to confirm this change.</p>
-                {% else %}
                 <p class="text-xs text-slate-600">Enter the code sent to your new email (<strong>{{ current_user.pending_email }}</strong>) to finish verifying it.</p>
-                {% endif %}
                 <form action="/profile/email/verify" method="POST" class="flex gap-2">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="otp" placeholder="6-digit code" maxlength="6" required
@@ -383,7 +379,7 @@
                     class="flex-1 text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
                 <button type="submit" class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Change</button>
             </form>
-            <p class="text-[10px] text-slate-400">Current: {{ current_user.email }}. We'll email a code to your current address first, then a second code to the new one before it takes effect.</p>
+            <p class="text-[10px] text-slate-400">Current: {{ current_user.email }}. We'll send a verification code to the new address.</p>
             {% endif %}
         </div>
     </div>
@@ -638,25 +634,18 @@
 
     let currentNoteId = null;
 
-    async function openPdfDownload(relativeUrl, noteId) {
+    function openPdfDownload(relativeUrl) {
         const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-        if(!isNative) {
+        if(isNative) {
+            window.Capacitor.Plugins.Browser.open({ url: window.location.origin + relativeUrl });
+        } else {
             window.open(window.location.origin + relativeUrl, '_blank');
-            return;
-        }
-        try {
-            const res = await fetch(`/api/study/notes/${noteId}/download-token`);
-            const data = await res.json();
-            if(!data.success) return alert("Could not prepare download: " + data.error);
-            window.Capacitor.Plugins.Browser.open({ url: window.location.origin + data.url });
-        } catch(e) {
-            alert("Could not prepare download. Please try again.");
         }
     }
 
     function downloadCurrentNote() {
         if(!currentNoteId) return;
-        openPdfDownload(`/api/study/notes/${currentNoteId}/pdf`, currentNoteId);
+        openPdfDownload(`/api/study/notes/${currentNoteId}/pdf`);
     }
 
     const downloadBtn = document.getElementById('downloadNoteBtn');

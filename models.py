@@ -22,8 +22,6 @@ class User(UserMixin, db.Model):
     pending_email = db.Column(db.String(150), nullable=True)
     email_change_otp = db.Column(db.String(6), nullable=True)
     email_change_otp_expires = db.Column(db.DateTime, nullable=True)
-    email_change_stage = db.Column(db.String(20), nullable=True)
-    email_change_attempts = db.Column(db.Integer, default=0)
     supabase_uid = db.Column(db.String(255), unique=True, nullable=True)
     auth_provider = db.Column(db.String(20), default="password", nullable=True)
 
@@ -34,7 +32,9 @@ class QuizSession(db.Model):
     difficulty = db.Column(db.String(50), nullable=False) # easy, medium, hard, god mode
     total_questions = db.Column(db.Integer, nullable=False)
     duration_minutes = db.Column(db.Integer, nullable=False)
+    seconds_remaining = db.Column(db.Integer, nullable=True)
     hints_remaining = db.Column(db.Integer, nullable=False)
+
     score = db.Column(db.Integer, default=0)
     recommendation = db.Column(db.Text, nullable=True)
     is_completed = db.Column(db.Boolean, default=False)
@@ -54,6 +54,8 @@ class QuizQuestion(db.Model):
     hint = db.Column(db.Text, nullable=True)
     explanation = db.Column(db.Text, nullable=True) # Post-attempt feedback structure
     user_answer = db.Column(db.Integer, nullable=True)
+    hint_requested = db.Column(db.Boolean, default=False)
+
 
 class FlashcardDeck(db.Model):
     id = db.Column(db.Integer, primary_key=True)

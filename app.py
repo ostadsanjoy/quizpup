@@ -4,16 +4,14 @@ import time
 import json
 import math
 import re
-import random
 import logging
 import secrets
 import threading
 import uuid
 import hmac
 import requests
-import base64
 import concurrent.futures
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_file, g
@@ -23,7 +21,6 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from pypdf import PdfReader, PdfWriter
@@ -33,9 +30,8 @@ from google import genai
 from google.genai import types
 from supabase import create_client, Client
 from flashcard_data import PRELOADED_DECKS
-import filetype
 
-from sqlalchemy import inspect, text, func
+from sqlalchemy import text, func
 from models import db, User, QuizSession, QuizQuestion, SuperNote, FlashcardDeck
 
 load_dotenv()
@@ -82,19 +78,22 @@ app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 ALLOWED_NOTE_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.webp'}
-ALLOWED_NOTE_KINDS = {'pdf', 'jpg', 'jpeg', 'png', 'webp'}
 
 def is_allowed_upload_content(filepath, expect_pdf):
-    kind = filetype.guess(filepath)
-    if kind is None:
+    try:
+        with open(filepath, 'rb') as f:
+            header = f.read(12)
+    except Exception:
         return False
-    if kind.extension not in ALLOWED_NOTE_KINDS:
-        return False
-    if expect_pdf and kind.extension != 'pdf':
-        return False
-    if not expect_pdf and kind.extension == 'pdf':
-        return False
-    return True
+
+    is_pdf_file = header.startswith(b'%PDF-')
+    is_jpg = header.startswith(b'\xff\xd8\xff')
+    is_png = header.startswith(b'\x89PNG\r\n\x1a\n')
+    is_webp = header.startswith(b'RIFF') and header[8:12] == b'WEBP'
+
+    if expect_pdf:
+        return is_pdf_file
+    return is_jpg or is_png or is_webp
 
 db.init_app(app)
 login_manager = LoginManager(app)
@@ -215,33 +214,13 @@ def call_gemini(**kwargs):
 
 SUPERNOTE_CHUNK_CHAR_LIMIT = 8000
 SUPERNOTE_MAX_PDF_PAGES = 60
-CHAPTER_HEADING_PATTERN = re.compile(r'(?im)^\s*(chapter|part|unit)\s+([0-9]+|[ivxlcdm]+)\b.*$')
 
 def split_into_segments(text, max_chars=SUPERNOTE_CHUNK_CHAR_LIMIT):
-    matches = list(CHAPTER_HEADING_PATTERN.finditer(text))
-    segments = []
-
-    if len(matches) >= 2:
-        for i, m in enumerate(matches):
-            start = m.start()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            segments.append((m.group().strip(), text[start:end]))
-    else:
-        segments = [(None, text)]
-
-    final_segments = []
-    for label, content in segments:
-        if len(content) <= max_chars:
-            final_segments.append((label, content))
-            continue
-        n_parts = math.ceil(len(content) / max_chars)
-        part_size = math.ceil(len(content) / n_parts)
-        for i in range(n_parts):
-            part = content[i * part_size: (i + 1) * part_size]
-            part_label = f"{label} (Part {i + 1})" if label else f"Part {i + 1}"
-            final_segments.append((part_label, part))
-
-    return final_segments
+    if len(text) <= max_chars:
+        return [(None, text)]
+    n_parts = math.ceil(len(text) / max_chars)
+    part_size = math.ceil(len(text) / n_parts)
+    return [(f"Part {i + 1}", text[i * part_size: (i + 1) * part_size]) for i in range(n_parts)]
 
 SUMMARY_SCHEMA = types.Schema(
     type=types.Type.OBJECT,
@@ -393,19 +372,7 @@ def generate_pdf_bytes(title, structured_summary):
 
     return bytes(pdf.output())
 
-download_token_serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
-def generate_download_token(note_id, user_id):
-    return download_token_serializer.dumps({"note_id": note_id, "user_id": user_id})
-
-def verify_download_token(token, note_id):
-    try:
-        data = download_token_serializer.loads(token, max_age=300)
-    except (BadSignature, SignatureExpired):
-        return None
-    if data.get("note_id") != note_id:
-        return None
-    return data.get("user_id")
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
@@ -466,7 +433,7 @@ def send_verification_email(target_email, otp_code):
     )
 
 def generate_otp():
-    return str(random.randint(100000, 999999))
+    return str(secrets.randbelow(900000) + 100000)
 
 PASSWORD_PATTERN = re.compile(r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$')
 PASSWORD_REQUIREMENTS_MESSAGE = (
@@ -486,8 +453,6 @@ def clear_email_change_state(user):
     user.pending_email = None
     user.email_change_otp = None
     user.email_change_otp_expires = None
-    user.email_change_stage = None
-    user.email_change_attempts = 0
 
 @app.route('/')
 def index():
@@ -541,22 +506,6 @@ def register():
             db.session.rollback()
             flash('That username or email was just taken by someone else. Please try again.', 'danger')
             return redirect(url_for('register'))
-
-        try:
-            supabase_client.auth.sign_up({
-                "email": email,
-                "password": password,
-                "options": {
-                    "data": {
-                        "username": username,
-                        "first_name": first_name,
-                        "last_name": last_name,
-                        "phone": phone
-                    }
-                }
-            })
-        except Exception as e:
-            logger.warning("Supabase sign_up notice: %s", str(e))
 
         session['pending_verification_user_id'] = new_user.id
 
@@ -639,7 +588,7 @@ def resend_verification_email():
     return redirect(url_for('verify_email'))
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("10 per minute; 50 per hour")
+@limiter.limit("25 per minute; 50 per hour")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
@@ -654,11 +603,6 @@ def login():
                 session['pending_verification_user_id'] = user.id
                 flash('Please verify your email before logging in. Check your inbox for the code.', 'warning')
                 return redirect(url_for('verify_email'))
-
-            try:
-                supabase_client.auth.sign_in_with_password({"email": user.email, "password": password})
-            except Exception as sb_err:
-                logger.warning("Supabase sign_in notice: %s", str(sb_err))
 
             session.permanent = True
             login_user(user, remember=True)
@@ -784,10 +728,11 @@ def complete_oauth_profile_submit():
     login_user(new_user, remember=True)
     return redirect(url_for('home'))
 
-@app.route('/ping', methods=['GET'])
+@app.route('/ping', methods=['GET', 'HEAD'])
 @limiter.exempt
 def ping_server():
-    return jsonify({"status": "healthy", "message": "Stay awake, pup!"}), 200
+    return "OK", 200
+
 
 # ==========================================
 #          PASSWORD RECOVERY ROUTES
@@ -941,20 +886,15 @@ def request_email_change():
     current_user.pending_email = new_email
     current_user.email_change_otp = otp_code
     current_user.email_change_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
-    current_user.email_change_stage = 'verify_current'
-    current_user.email_change_attempts = 0
     db.session.commit()
 
     send_email(
-        current_user.email,
-        "Confirm your QuizPup email change",
-        f"<p>We received a request to change the email on your QuizPup account to "
-        f"<strong>{escape(new_email)}</strong>.</p>"
-        f"<p>Your confirmation code is: <strong>{otp_code}</strong></p>"
-        f"<p>If you didn't request this, you can safely ignore this email — your "
-        f"address won't change without this code.</p>"
+        new_email,
+        "Verify your new QuizPup email address",
+        f"<p>Your verification code to confirm this as your new QuizPup email "
+        f"address is: <strong>{otp_code}</strong></p>"
     )
-    flash(f'A confirmation code has been sent to your current email ({current_user.email}).', 'success')
+    flash(f'A verification code has been sent to your new email ({new_email}).', 'success')
     return redirect(url_for('edit_profile_page'))
 
 @app.route('/profile/email/verify', methods=['POST'])
@@ -963,7 +903,7 @@ def request_email_change():
 def verify_email_change():
     submitted_otp = request.form.get('otp')
 
-    if not current_user.pending_email or not current_user.email_change_stage:
+    if not current_user.pending_email:
         flash('No pending email change found.', 'danger')
         return redirect(url_for('edit_profile_page'))
 
@@ -974,51 +914,21 @@ def verify_email_change():
         db.session.commit()
         return redirect(url_for('edit_profile_page'))
 
-    if current_user.email_change_attempts >= OTP_MAX_ATTEMPTS:
-        flash('Too many incorrect attempts. Please start the email change again.', 'danger')
-        clear_email_change_state(current_user)
-        db.session.commit()
-        return redirect(url_for('edit_profile_page'))
-
     if not otp_matches(submitted_otp, current_user.email_change_otp):
-        current_user.email_change_attempts += 1
-        db.session.commit()
         flash('Incorrect code. Please try again.', 'danger')
         return redirect(url_for('edit_profile_page'))
 
-    if current_user.email_change_stage == 'verify_current':
-        # Current email confirmed — now verify ownership of the new address
-        otp_code = generate_otp()
-        current_user.email_change_otp = otp_code
-        current_user.email_change_otp_expires = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
-        current_user.email_change_stage = 'verify_new'
-        current_user.email_change_attempts = 0
-        db.session.commit()
-
-        send_email(
-            current_user.pending_email,
-            "Verify your new QuizPup email address",
-            f"<p>Your verification code to confirm this as your new QuizPup email "
-            f"address is: <strong>{otp_code}</strong></p>"
-        )
-        flash(f'Confirmed. A verification code has been sent to your new email ({current_user.pending_email}).', 'success')
-        return redirect(url_for('edit_profile_page'))
-
-    elif current_user.email_change_stage == 'verify_new':
-        # Guard against the address being claimed by someone else mid-flow
-        if User.query.filter(User.email.ilike(current_user.pending_email), User.id != current_user.id).first():
-            flash('That email address was just claimed by another account. Please try a different address.', 'danger')
-            clear_email_change_state(current_user)
-            db.session.commit()
-            return redirect(url_for('edit_profile_page'))
-
-        current_user.email = current_user.pending_email
+    if User.query.filter(User.email.ilike(current_user.pending_email), User.id != current_user.id).first():
+        flash('That email address was just claimed by another account. Please try a different address.', 'danger')
         clear_email_change_state(current_user)
         db.session.commit()
-        flash('Your email address has been updated successfully.', 'success')
-        return redirect(url_for('profile'))
+        return redirect(url_for('edit_profile_page'))
 
-    return redirect(url_for('edit_profile_page'))
+    current_user.email = current_user.pending_email
+    clear_email_change_state(current_user)
+    db.session.commit()
+    flash('Your email address has been updated successfully.', 'success')
+    return redirect(url_for('profile'))
 
 @app.route('/profile/email/cancel', methods=['POST'])
 @login_required
@@ -1089,7 +999,22 @@ def generate_ai_flashcards():
         required=["cards"]
     )
 
-    prompt = f"Create 15 - 25 revision flashcards matching the core and most important concepts in the parameter topic context: '{topic}'. Keep answers within 3 lines."
+    prompt = f"""You are building a study deck for a student actively preparing for exams on: '{topic}'.
+
+Generate 18-25 flashcards that cover the highest-value testable concepts.
+
+Card design rules:
+- QUESTION side: ask ONE specific thing — a definition, formula, distinction,
+  cause/effect, or "why" question. Never ask vague questions like "Tell me about X".
+  Phrase as direct recall prompts: "What is…", "State the formula for…",
+  "Distinguish X from Y", "Why does… happen?"
+- ANSWER side: 1-3 concise sentences. Include the key fact, formula, or
+  reasoning. If a formula applies, state it. No filler, no preamble.
+- Prioritize concepts students commonly confuse, formulas they must memorize,
+  and distinctions between similar ideas.
+- Spread coverage across ALL major subtopics — do not cluster on one area.
+- Order cards from foundational concepts to advanced ones.
+"""
     try:
         response = call_gemini(
             model=pick_model(),
@@ -1298,28 +1223,10 @@ def supernotes_view(note_id):
         "created_at": note.created_at.isoformat()
     })
 
-@app.route('/api/study/notes/<int:note_id>/download-token', methods=['GET'])
-@login_required
-def supernotes_download_token(note_id):
-    note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
-    if not note or note.status != "complete":
-        return jsonify({"success": False, "error": "Note not found or not ready yet."}), 404
-    token = generate_download_token(note_id, current_user.id)
-    return jsonify({"success": True, "url": f"/api/study/notes/{note_id}/pdf?token={token}"})
-
 @app.route('/api/study/notes/<int:note_id>/pdf', methods=['GET'])
+@login_required
 def supernotes_download(note_id):
-    token = request.args.get('token')
-    if token:
-        owner_id = verify_download_token(token, note_id)
-        if owner_id is None:
-            return jsonify({"success": False, "error": "This download link has expired. Please try downloading again."}), 401
-    elif current_user.is_authenticated:
-        owner_id = current_user.id
-    else:
-        return jsonify({"success": False, "error": "Session expired or not logged in. Please refresh and log in again."}), 401
-
-    note = SuperNote.query.filter_by(id=note_id, user_id=owner_id).first()
+    note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note or note.status != "complete":
         return jsonify({"success": False, "error": "Note not found or not ready yet."}), 404
     safe_name = secure_filename(note.title) or "supernote"
@@ -1385,7 +1292,6 @@ def generate_quiz():
     else:
         hints_allowed = 0
 
-    system_tone = "highly complex, rigorous, and university-level" if difficulty == "god mode" else "standard academic evaluation"
     primary_model = pick_model(is_hardest=(difficulty == "god mode"), char_count=len(source_text))
     context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
@@ -1416,17 +1322,31 @@ def generate_quiz():
         required=["questions"]
     )
 
+    difficulty_guide = {
+        "easy": "Test direct recall and basic understanding. Questions should have one clearly correct answer and three obviously wrong distractors. Suitable for beginners reviewing fundamentals.",
+        "medium": "Test application and analysis. Require applying concepts to scenarios or distinguishing between similar ideas. Distractors should be plausible but distinguishable with solid understanding.",
+        "hard": "Test synthesis and evaluation. Use multi-step reasoning, edge cases, and subtle distinctions. All four options should seem plausible — only deep understanding separates the correct answer.",
+        "god mode": "Test at competitive exam / graduate-entrance level. Combine multiple concepts per question, use tricky edge cases, require precise technical knowledge. Distractors must be expertly crafted near-misses that would fool anyone who doesn't know the material cold."
+    }
+
     def generate_batch(batch_index, current_batch_target):
-        prompt = f"""
-        You are an elite educational testing engine. Generate a comprehensive multiple-choice evaluation quiz strictly based on the provided material.
-        {context_source}
-        
-        Requirements:
-        1. Output exactly {current_batch_target} distinct and unique questions. This is batch chunk {batch_index+1} of {loops_needed}.
-        2. Difficulty setting: {difficulty} ({system_tone}).
-        3. Provide a short, single-sentence indirect hint for each question.
-        4. Provide a clear, maximum 2-sentence conceptual explanation details string.
-        """
+        prompt = f"""You are an expert exam question writer creating a multiple-choice quiz.
+{context_source}
+
+Generate exactly {current_batch_target} unique questions. Batch {batch_index+1} of {loops_needed}.
+
+Difficulty: {difficulty}
+{difficulty_guide.get(difficulty, difficulty_guide['medium'])}
+
+Question design rules:
+1. Each question stem must be a complete, self-contained question — never "Which of the following…" without context.
+2. All four options must be similar in length and grammatical structure.
+3. Place the correct answer at a RANDOM position (1-4) — do NOT default to any position.
+4. Distractors must be plausible wrong answers from the same domain, not absurd fillers.
+5. No two questions should test the exact same fact. Spread coverage across all subtopics.
+6. "hint": A short nudge that points TOWARD the right reasoning without revealing the answer (e.g. "Think about what happens when pressure increases" not "The answer is Boyle's Law").
+7. "explanation": After the student answers, explain WHY the correct answer is right AND why the most tempting wrong answer is wrong. Max 2 sentences.
+"""
         response = call_gemini(
             model=primary_model,
             contents=prompt,
@@ -1469,6 +1389,7 @@ def generate_quiz():
             difficulty=difficulty,
             total_questions=total_q,
             duration_minutes=duration,
+            seconds_remaining=duration * 60,
             hints_remaining=hints_allowed
         )
         db.session.add(quiz_session_instance)
@@ -1504,7 +1425,8 @@ def run_quiz(session_id):
     session_instance = QuizSession.query.get_or_404(session_id)
     if session_instance.user_id != current_user.id:
         return redirect(url_for('home'))
-    return render_template('quiz.html', session=session_instance)
+    return render_template('quiz.html', session=session_instance, view='quiz', hide_bottom_nav=True)
+
 
 @app.route('/api/quiz/<int:session_id>/questions')
 @login_required
@@ -1523,14 +1445,14 @@ def get_quiz_questions(session_id):
     } for q in session_instance.questions]
     
     explanations_map = {}
-    saved_answers_map = {}
+    saved_answers_map = {q.id: q.user_answer for q in session_instance.questions if q.user_answer is not None}
     if session_instance.is_completed:
         for q in session_instance.questions:
-            saved_answers_map[q.id] = q.user_answer
             explanations_map[q.id] = {"correct": q.correct_option, "explanation": q.explanation}
             
     return jsonify({
         "duration": session_instance.duration_minutes,
+        "seconds_remaining": session_instance.seconds_remaining if session_instance.seconds_remaining is not None else session_instance.duration_minutes * 60,
         "difficulty": session_instance.difficulty,
         "hints_remaining": session_instance.hints_remaining,
         "is_completed": session_instance.is_completed,
@@ -1541,6 +1463,7 @@ def get_quiz_questions(session_id):
         "saved_answers": saved_answers_map,
         "explanations": explanations_map
     })
+
 
 @app.route('/api/quiz/<int:session_id>/submit', methods=['POST'])
 @login_required
@@ -1571,25 +1494,82 @@ def submit_quiz(session_id):
     
     return jsonify({"score": score, "total": session_instance.total_questions, "recommendation": session_instance.recommendation})
 
-def sync_missing_columns():
-    inspector = inspect(db.engine)
-    existing_tables = set(inspector.get_table_names())
-    for mapper in db.Model.registry.mappers:
-        table = mapper.local_table
-        if table is None or table.name not in existing_tables:
-            continue
-        existing_cols = {col['name'] for col in inspector.get_columns(table.name)}
-        for column in table.columns:
-            if column.name in existing_cols:
-                continue
-            col_type = column.type.compile(dialect=db.engine.dialect)
-            with db.engine.connect() as conn:
-                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'))
-                conn.commit()
+@app.route('/api/quiz/<int:session_id>/save-progress', methods=['POST'])
+@login_required
+@csrf.exempt
+def save_quiz_progress(session_id):
+
+    session_instance = QuizSession.query.get_or_404(session_id)
+    if session_instance.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
+
+    if session_instance.is_completed:
+        return jsonify({"success": True, "message": "Quiz already completed"})
+
+    data = request.json or {}
+    answers = data.get('answers', {})
+    seconds_left = data.get('seconds_remaining')
+
+    if seconds_left is not None:
+        try:
+            session_instance.seconds_remaining = int(seconds_left)
+        except (TypeError, ValueError):
+            pass
+
+    for q in session_instance.questions:
+        if str(q.id) in answers:
+            ans_val = answers[str(q.id)]
+            try:
+                q.user_answer = int(ans_val) if ans_val is not None else None
+            except (TypeError, ValueError):
+                q.user_answer = None
+
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/api/quiz/<int:session_id>/hint/<int:question_id>', methods=['POST'])
+@login_required
+def get_quiz_hint(session_id, question_id):
+    session_instance = QuizSession.query.get_or_404(session_id)
+    if session_instance.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
+
+    if session_instance.difficulty not in ('easy', 'medium'):
+        return jsonify({"error": f"Hints are disabled for {session_instance.difficulty} mode."}), 400
+
+    question = QuizQuestion.query.filter_by(id=question_id, session_id=session_id).first_or_404()
+
+    # Deduct hint count only if this question's hint has not been requested yet
+    if not getattr(question, 'hint_requested', False):
+        if session_instance.difficulty == 'medium':
+            if session_instance.hints_remaining <= 0:
+                return jsonify({"error": "No hints remaining!"}), 400
+            session_instance.hints_remaining -= 1
+        question.hint_requested = True
+        db.session.commit()
+
+    return jsonify({
+        "hint": question.hint or "No hint available for this question.",
+        "hints_remaining": session_instance.hints_remaining
+    })
+
 
 with app.app_context():
     db.create_all()
-    sync_missing_columns()
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(db.text("ALTER TABLE quiz_question ADD COLUMN hint_requested BOOLEAN DEFAULT 0"))
+            conn.commit()
+    except Exception:
+        pass
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(db.text("ALTER TABLE quiz_session ADD COLUMN seconds_remaining INTEGER"))
+            conn.commit()
+    except Exception:
+        pass
+
+
 
 @app.errorhandler(413)
 def handle_file_too_large(e):
