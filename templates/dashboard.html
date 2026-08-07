@@ -27,20 +27,28 @@
 
         <div class="space-y-4">
             {% for q in past_quizzes %}
-            <a href="/quiz/{{ q.id }}"
-                class="block bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition shadow-sm group">
-                <div class="space-y-1">
+            <div id="quiz-card-{{ q.id }}"
+                class="bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition shadow-sm group">
+                <a href="/quiz/{{ q.id }}" class="flex-1 space-y-1 pr-3">
                     <h4 class="font-bold text-[#744253] text-lg group-hover:underline">{{ q.topic }}</h4>
                     <div class="flex gap-4 text-xs font-medium text-[#744253] opacity-80">
                         <span>Questions: {{ q.total_questions }}</span>
                         <span>Time: {{ q.duration_minutes }}m</span>
                     </div>
+                </a>
+                <div class="flex items-center gap-3">
+                    <a href="/quiz/{{ q.id }}" class="text-right">
+                        <span class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
+                        <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions }}</span>
+                    </a>
+                    <button onclick="deleteQuizSession({{ q.id }}, event)" title="Delete Quiz" class="p-2 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-xl transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
                 </div>
-                <div class="text-right">
-                    <span class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
-                    <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions }}</span>
-                </div>
-            </a>
+            </div>
+
             {% else %}
             <div class="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-3xl">
                 <p class="text-sm text-slate-400 font-medium">No Quizzes attempted yet.</p>
@@ -817,14 +825,27 @@
 
             try {
                 const res = await fetch('/generate-quiz', { method: 'POST', body: new FormData(e.target) });
-                const data = await res.json();
+                let data;
+                const contentType = res.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    data = await res.json();
+                } else {
+                    const text = await res.text();
+                    data = {
+                        success: false,
+                        error: res.status === 504 
+                            ? "Generation timed out on the server. Try generating fewer questions (e.g. 10-20) or choosing a smaller input."
+                            : "Server returned an unexpected error. Please try again."
+                    };
+                }
+
                 if (data.success) {
                     clearInterval(dotTimer);
                     if (labelEl) labelEl.textContent = 'Ready! Loading quiz';
                     window.location.href = `/quiz/${data.session_id}`;
                 } else {
                     clearInterval(dotTimer);
-                    alert("Error: " + data.error);
+                    alert("Error: " + (data.error || "Could not generate quiz."));
                     btn.disabled = false;
                     btn.classList.remove('opacity-90', 'cursor-not-allowed');
                     btn.innerHTML = originalHTML;
@@ -842,5 +863,32 @@
     if (document.getElementById('fcMyDecksSection')) {
         loadMyFlashcardDecks();
     }
+
+    async function deleteQuizSession(quizId, event) {
+        if (event) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
+        if (!confirm("Are you sure you want to delete this past quiz?")) return;
+
+        try {
+            const res = await fetch(`/api/quiz/${quizId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                const card = document.getElementById(`quiz-card-${quizId}`);
+                if (card) {
+                    card.style.transition = 'all 0.3s ease';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.95)';
+                    setTimeout(() => card.remove(), 300);
+                }
+            } else {
+                alert(data.error || "Could not delete quiz.");
+            }
+        } catch(err) {
+            alert("Failed to delete quiz. Please try again.");
+        }
+    }
 </script>
+
 {% endblock %}

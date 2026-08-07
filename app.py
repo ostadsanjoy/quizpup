@@ -1570,19 +1570,41 @@ with app.app_context():
         pass
 
 
+@app.route('/api/quiz/<int:session_id>', methods=['DELETE'])
+@login_required
+def delete_quiz_session(session_id):
+    session_instance = QuizSession.query.get_or_404(session_id)
+    if session_instance.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
+
+    QuizQuestion.query.filter_by(session_id=session_id).delete()
+    db.session.delete(session_instance)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "Quiz deleted successfully"})
+
+
+def _is_api_or_ajax_request():
+    return (
+        request.path.startswith('/api/') or
+        request.path == '/generate-quiz' or
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+        'application/json' in request.headers.get('Accept', '') or
+        request.is_json
+    )
 
 @app.errorhandler(413)
 def handle_file_too_large(e):
     max_mb = app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
     message = f"That file is too large. The maximum upload size is {max_mb}MB — try a lower-resolution scan or split the document into smaller parts."
-    if request.path.startswith('/api/'):
+    if _is_api_or_ajax_request():
         return jsonify({"success": False, "error": message}), 413
     return message, 413
 
 @app.errorhandler(429)
 def handle_rate_limit(e):
     message = "You're doing that a bit too fast — please wait a moment and try again."
-    if request.path.startswith('/api/'):
+    if _is_api_or_ajax_request():
         return jsonify({"success": False, "error": message}), 429
     flash(message, 'error')
     return redirect(request.referrer or url_for('home'))
@@ -1590,13 +1612,14 @@ def handle_rate_limit(e):
 @app.errorhandler(Exception)
 def handle_uncaught_exception(e):
     if isinstance(e, HTTPException):
-        if request.path.startswith('/api/'):
+        if _is_api_or_ajax_request():
             return jsonify({"success": False, "error": e.description}), e.code
         return e
     logger.exception("Unhandled exception on %s", request.path)
-    if request.path.startswith('/api/'):
+    if _is_api_or_ajax_request():
         return jsonify({"success": False, "error": "An unexpected server error occurred. Please try again."}), 500
     raise e
+
 
 if __name__ == '__main__':
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
