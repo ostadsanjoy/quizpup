@@ -1558,30 +1558,46 @@ with app.app_context():
     db.create_all()
     try:
         with db.engine.connect() as conn:
-            conn.execute(db.text("ALTER TABLE quiz_question ADD COLUMN hint_requested BOOLEAN DEFAULT 0"))
-            conn.commit()
-    except Exception:
-        pass
+            try:
+                conn.execute(db.text("ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS hint_requested BOOLEAN DEFAULT FALSE"))
+                conn.commit()
+            except Exception:
+                conn.execute(db.text("ALTER TABLE quiz_question ADD COLUMN hint_requested BOOLEAN DEFAULT FALSE"))
+                conn.commit()
+    except Exception as e:
+        logger.warning("Migration hint_requested notice: %s", e)
+
     try:
         with db.engine.connect() as conn:
-            conn.execute(db.text("ALTER TABLE quiz_session ADD COLUMN seconds_remaining INTEGER"))
-            conn.commit()
-    except Exception:
-        pass
+            try:
+                conn.execute(db.text("ALTER TABLE quiz_session ADD COLUMN IF NOT EXISTS seconds_remaining INTEGER"))
+                conn.commit()
+            except Exception:
+                conn.execute(db.text("ALTER TABLE quiz_session ADD COLUMN seconds_remaining INTEGER"))
+                conn.commit()
+    except Exception as e:
+        logger.warning("Migration seconds_remaining notice: %s", e)
 
 
 @app.route('/api/quiz/<int:session_id>', methods=['DELETE'])
 @login_required
+@csrf.exempt
 def delete_quiz_session(session_id):
-    session_instance = QuizSession.query.get_or_404(session_id)
-    if session_instance.user_id != current_user.id:
-        return jsonify({"error": "Not authorized"}), 403
+    try:
+        session_instance = QuizSession.query.get_or_404(session_id)
+        if session_instance.user_id != current_user.id:
+            return jsonify({"error": "Not authorized"}), 403
 
-    QuizQuestion.query.filter_by(session_id=session_id).delete()
-    db.session.delete(session_instance)
-    db.session.commit()
+        QuizQuestion.query.filter_by(session_id=session_id).delete(synchronize_session=False)
+        db.session.delete(session_instance)
+        db.session.commit()
 
-    return jsonify({"success": True, "message": "Quiz deleted successfully"})
+        return jsonify({"success": True, "message": "Quiz deleted successfully"})
+    except Exception as e:
+        logger.exception("Failed to delete quiz session %s", session_id)
+        db.session.rollback()
+        return jsonify({"error": "Could not delete quiz session."}), 500
+
 
 
 def _is_api_or_ajax_request():

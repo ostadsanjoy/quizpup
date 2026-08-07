@@ -40,7 +40,8 @@ class QuizSession(db.Model):
     is_completed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    questions = db.relationship('QuizQuestion', backref='session', lazy=True)
+    questions = db.relationship('QuizQuestion', backref='session', lazy=True, cascade="all, delete-orphan")
+
 
 class QuizQuestion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
