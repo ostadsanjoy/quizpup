@@ -1,6 +1,6 @@
+from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from datetime import datetime
 
 db = SQLAlchemy()
 
@@ -8,7 +8,6 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    # New Registration fields
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
@@ -29,19 +28,16 @@ class QuizSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     topic = db.Column(db.String(255), nullable=False)
-    difficulty = db.Column(db.String(50), nullable=False) # easy, medium, hard, god mode
+    difficulty = db.Column(db.String(50), nullable=False)
     total_questions = db.Column(db.Integer, nullable=False)
     duration_minutes = db.Column(db.Integer, nullable=False)
     seconds_remaining = db.Column(db.Integer, nullable=True)
     hints_remaining = db.Column(db.Integer, nullable=False)
-
     score = db.Column(db.Integer, default=0)
     recommendation = db.Column(db.Text, nullable=True)
     is_completed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
     questions = db.relationship('QuizQuestion', backref='session', lazy=True, cascade="all, delete-orphan")
-
 
 class QuizQuestion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -51,27 +47,26 @@ class QuizQuestion(db.Model):
     option_2 = db.Column(db.String(255), nullable=False)
     option_3 = db.Column(db.String(255), nullable=False)
     option_4 = db.Column(db.String(255), nullable=False)
-    correct_option = db.Column(db.Integer, nullable=False) # 1, 2, 3, or 4
+    correct_option = db.Column(db.Integer, nullable=False)
     hint = db.Column(db.Text, nullable=True)
-    explanation = db.Column(db.Text, nullable=True) # Post-attempt feedback structure
+    explanation = db.Column(db.Text, nullable=True)
     user_answer = db.Column(db.Integer, nullable=True)
     hint_requested = db.Column(db.Boolean, default=False)
-
 
 class FlashcardDeck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     topic = db.Column(db.String(255), nullable=False)
-    cards_json = db.Column(db.Text, nullable=False)  # JSON-encoded list of {question, answer}
+    cards_json = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SuperNote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
-    status = db.Column(db.String(20), default="processing")  # processing, complete, failed
+    status = db.Column(db.String(20), default="processing")
     error_message = db.Column(db.Text, nullable=True)
     digitized_text = db.Column(db.Text, nullable=True)
     summary_html = db.Column(db.Text, nullable=True)
     pdf_data = db.Column(db.LargeBinary, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

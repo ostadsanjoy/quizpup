@@ -81,19 +81,10 @@ ALLOWED_NOTE_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.webp'}
 
 def is_allowed_upload_content(filepath, expect_pdf):
     try:
-        with open(filepath, 'rb') as f:
-            header = f.read(12)
-    except Exception:
-        return False
+        h = open(filepath, 'rb').read(12)
+        return h.startswith(b'%PDF-') if expect_pdf else (h.startswith(b'\xff\xd8\xff') or h.startswith(b'\x89PNG\r\n\x1a\n') or (h.startswith(b'RIFF') and h[8:12] == b'WEBP'))
+    except Exception: return False
 
-    is_pdf_file = header.startswith(b'%PDF-')
-    is_jpg = header.startswith(b'\xff\xd8\xff')
-    is_png = header.startswith(b'\x89PNG\r\n\x1a\n')
-    is_webp = header.startswith(b'RIFF') and header[8:12] == b'WEBP'
-
-    if expect_pdf:
-        return is_pdf_file
-    return is_jpg or is_png or is_webp
 
 db.init_app(app)
 login_manager = LoginManager(app)
@@ -330,15 +321,13 @@ def batch_ocr_pdf(filepath, page_count, batch_size=15):
 
 def render_summary_html(structured_summary):
     parts = []
-    for chapter in structured_summary:
-        if chapter.get("chapter"):
-            parts.append(f"<h4>{escape(chapter['chapter'])}</h4>")
-        for topic in chapter.get("topics", []):
-            if topic.get("heading"):
-                parts.append(f"<strong>{escape(topic['heading'])}</strong>")
-            bullets_html = "".join(f"<li>{escape(b)}</li>" for b in topic.get("bullets", []))
-            parts.append(f"<ul>{bullets_html}</ul>")
+    for ch in structured_summary:
+        if ch.get("chapter"): parts.append(f"<h4>{escape(ch['chapter'])}</h4>")
+        for t in ch.get("topics", []):
+            if t.get("heading"): parts.append(f"<strong>{escape(t['heading'])}</strong>")
+            parts.append(f"<ul>{''.join(f'<li>{escape(b)}</li>' for b in t.get('bullets', []))}</ul>")
     return "\n".join(parts)
+
 
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "fonts")
 
@@ -1556,27 +1545,7 @@ def get_quiz_hint(session_id, question_id):
 
 with app.app_context():
     db.create_all()
-    try:
-        with db.engine.connect() as conn:
-            try:
-                conn.execute(db.text("ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS hint_requested BOOLEAN DEFAULT FALSE"))
-                conn.commit()
-            except Exception:
-                conn.execute(db.text("ALTER TABLE quiz_question ADD COLUMN hint_requested BOOLEAN DEFAULT FALSE"))
-                conn.commit()
-    except Exception as e:
-        logger.warning("Migration hint_requested notice: %s", e)
 
-    try:
-        with db.engine.connect() as conn:
-            try:
-                conn.execute(db.text("ALTER TABLE quiz_session ADD COLUMN IF NOT EXISTS seconds_remaining INTEGER"))
-                conn.commit()
-            except Exception:
-                conn.execute(db.text("ALTER TABLE quiz_session ADD COLUMN seconds_remaining INTEGER"))
-                conn.commit()
-    except Exception as e:
-        logger.warning("Migration seconds_remaining notice: %s", e)
 
 
 @app.route('/api/quiz/<int:session_id>', methods=['DELETE'])
