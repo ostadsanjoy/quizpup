@@ -5,7 +5,7 @@ from flask import request, jsonify
 from flask_login import login_required, current_user
 from google.genai import types
 
-from extensions import db, limiter
+from extensions import db, csrf, limiter
 from models import FlashcardDeck
 from flashcard_data import PRELOADED_DECKS
 from services.gemini_service import call_gemini, pick_model
@@ -135,22 +135,28 @@ def my_flashcard_decks():
     })
 
 
-@flashcards_bp.route('/api/flashcards/my-decks/<int:deck_id>', methods=['GET', 'DELETE', 'POST'])
-@flashcards_bp.route('/api/flashcards/my-decks/<int:deck_id>/delete', methods=['DELETE', 'POST'])
+@flashcards_bp.route('/api/flashcards/my-decks/<int:deck_id>', methods=['GET'])
 @login_required
-def manage_flashcard_deck(deck_id):
+def view_flashcard_deck(deck_id):
+    deck = FlashcardDeck.query.filter_by(id=deck_id, user_id=current_user.id).first()
+    if not deck:
+        return jsonify({"success": False, "error": "Flashcard deck not found."}), 404
+    return jsonify({"success": True, "topic": deck.topic, "deck": json.loads(deck.cards_json)})
+
+
+@flashcards_bp.route('/api/flashcards/my-decks/<int:deck_id>', methods=['DELETE'])
+@login_required
+@csrf.exempt
+def delete_flashcard_deck(deck_id):
     deck = FlashcardDeck.query.filter_by(id=deck_id, user_id=current_user.id).first()
     if not deck:
         return jsonify({"success": False, "error": "Flashcard deck not found."}), 404
 
-    if request.method in ['DELETE', 'POST'] or request.path.endswith('/delete'):
-        try:
-            db.session.delete(deck)
-            db.session.commit()
-            return jsonify({"success": True, "message": "Flashcard deck deleted successfully"})
-        except Exception:
-            db.session.rollback()
-            logger.exception("Failed to delete flashcard deck %s", deck_id)
-            return jsonify({"success": False, "error": "Could not delete flashcard deck."}), 500
-
-    return jsonify({"success": True, "topic": deck.topic, "deck": json.loads(deck.cards_json)})
+    try:
+        db.session.delete(deck)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Flashcard deck deleted successfully"})
+    except Exception:
+        db.session.rollback()
+        logger.exception("Failed to delete flashcard deck %s", deck_id)
+        return jsonify({"success": False, "error": "Could not delete flashcard deck."}), 500

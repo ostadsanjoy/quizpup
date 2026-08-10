@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 
-from extensions import db, limiter
+from extensions import db, csrf, limiter
 from models import SuperNote
 from services.security_utils import is_allowed_upload_content, ALLOWED_NOTE_EXTENSIONS
 from services.supernotes_service import run_supernotes_job, SUPERNOTE_MAX_PDF_PAGES
@@ -115,6 +115,24 @@ def supernotes_view(note_id):
         "summary": note.summary_html,
         "created_at": note.created_at.isoformat()
     })
+
+
+@notes_bp.route('/api/study/notes/<int:note_id>', methods=['DELETE'])
+@login_required
+@csrf.exempt
+def delete_supernote(note_id):
+    note = SuperNote.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note:
+        return jsonify({"success": False, "error": "Note not found."}), 404
+
+    try:
+        db.session.delete(note)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Note deleted successfully"})
+    except Exception:
+        db.session.rollback()
+        logger.exception("Failed to delete supernote %s", note_id)
+        return jsonify({"success": False, "error": "Could not delete note."}), 500
 
 
 @notes_bp.route('/api/study/notes/<int:note_id>/pdf', methods=['GET'])

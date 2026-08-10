@@ -770,6 +770,16 @@
         downloadBtn.addEventListener('click', downloadCurrentNote);
     }
 
+    function deleteRowBtnHTML(noteId) {
+        return `
+            <button onclick="deleteSupernote(${noteId}, event)" title="Delete SuperNote" class="p-1.5 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-lg transition cursor-pointer flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </button>
+        `;
+    }
+
     function historyRowHTML(note) {
         const dateStr = new Date(note.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
         if (note.status === 'processing') {
@@ -778,7 +788,10 @@
                     <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
                     <p class="text-[10px] text-amber-600">⏳ Processing... (${dateStr})</p>
                 </div>
-                <span class="text-[10px] font-bold text-amber-600 shrink-0">Please wait</span>
+                <div class="flex items-center gap-1 shrink-0">
+                    <span class="text-[10px] font-bold text-amber-600">Please wait</span>
+                    ${deleteRowBtnHTML(note.id)}
+                </div>
             `;
         }
         if (note.status === 'failed') {
@@ -787,7 +800,10 @@
                     <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
                     <p class="text-[10px] text-red-500">Failed (${dateStr})</p>
                 </div>
-                <span class="text-[10px] font-bold text-red-500 shrink-0">Error</span>
+                <div class="flex items-center gap-1 shrink-0">
+                    <span class="text-[10px] font-bold text-red-500">Error</span>
+                    ${deleteRowBtnHTML(note.id)}
+                </div>
             `;
         }
         return `
@@ -795,9 +811,10 @@
                 <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
                 <p class="text-[10px] text-slate-400">${dateStr}</p>
             </div>
-            <div class="flex gap-2 shrink-0">
+            <div class="flex items-center gap-2 shrink-0">
                 <button class="text-[10px] font-bold text-[#744253] bg-white border border-[#B49286] px-2.5 py-1.5 rounded-lg hover:bg-[#744253] hover:text-white transition">View</button>
                 <button class="text-[10px] font-bold text-white bg-[#744253] px-2.5 py-1.5 rounded-lg hover:bg-black transition">⬇</button>
+                ${deleteRowBtnHTML(note.id)}
             </div>
         `;
     }
@@ -826,6 +843,22 @@
             });
         } catch (e) {
             listEl.innerHTML = '<p class="text-xs text-red-400">Could not load history.</p>';
+        }
+    }
+
+    async function deleteSupernote(noteId, event) {
+        if (event) event.stopPropagation();
+        if (!confirm("Are you sure you want to delete this SuperNote? This can't be undone.")) return;
+        try {
+            const res = await fetch(`/api/study/notes/${noteId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                loadNotesHistory();
+            } else {
+                alert(data.error || "Could not delete this note.");
+            }
+        } catch (err) {
+            alert("Failed to delete note. Please try again.");
         }
     }
 
