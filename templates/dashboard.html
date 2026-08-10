@@ -38,12 +38,17 @@
                 </a>
                 <div class="flex items-center gap-3">
                     <a href="/quiz/{{ q.id }}" class="text-right">
-                        <span class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
-                        <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions }}</span>
+                        <span
+                            class="block text-xs font-bold text-[#744253] opacity-70 uppercase tracking-wider">Score:</span>
+                        <span class="text-xl font-black text-[#744253] font-mono">{{ q.score }}/{{ q.total_questions
+                            }}</span>
                     </a>
-                    <button onclick="deleteQuizSession({{ q.id }}, event)" title="Delete Quiz" class="p-2 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-xl transition cursor-pointer">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <button onclick="deleteQuizSession({{ q.id }}, event)" title="Delete Quiz"
+                        class="p-2 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-xl transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                     </button>
                 </div>
@@ -59,10 +64,11 @@
 
     <div id="quizFormSection" class="hidden bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
         <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">⬅ Back to Feed</button>
+            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">⬅ Back to
+                Feed</button>
             <span class="text-xs uppercase font-mono tracking-widest text-[#B49286] font-bold">Quiz Setup</span>
         </div>
-        
+
         <div class="bg-[#C78283] p-3 rounded-2xl">
             <h3 class="text-lg font-bold text-white text-center">Configure Quiz Parameters</h3>
         </div>
@@ -74,7 +80,8 @@
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
 
-            <div class="border-2 border-dashed border-[#B49286] bg-[#F3D9DC]/30 rounded-xl p-4 text-center transition hover:bg-[#F3D9DC]/50">
+            <div
+                class="border-2 border-dashed border-[#B49286] bg-[#F3D9DC]/30 rounded-xl p-4 text-center transition hover:bg-[#F3D9DC]/50">
                 <label class="block text-sm font-bold text-[#744253] cursor-pointer hover:underline">
                     Upload Target PDF Document
                     <input type="file" name="pdf_file" accept=".pdf" class="hidden" id="pdfFileInput">
@@ -83,7 +90,8 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Difficulty Mode</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Difficulty
+                    Mode</label>
                 <select name="difficulty"
                     class="w-full border border-[#B49286] bg-white rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                     <option value="easy">Easy</option>
@@ -94,11 +102,13 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Total Questions</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Total
+                    Questions</label>
                 <div class="grid grid-cols-5 gap-1.5 mb-2">
                     {% for count in [10, 20, 30, 50, 100] %}
                     <button type="button" data-count="{{ count }}" onclick="setQCount(this.dataset.count)"
-                        class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition shadow-sm">{{ count }}</button>
+                        class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition shadow-sm">{{
+                        count }}</button>
                     {% endfor %}
                 </div>
                 <input type="number" id="custom_q" name="total_questions" min="10" max="200" value="10"
@@ -106,7 +116,8 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Duration (Minutes)</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Duration
+                    (Minutes)</label>
                 <input type="number" name="duration" min="1" value="15"
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
@@ -121,40 +132,48 @@
     {% elif view == 'flashcards' %}
     <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-6">
         <div class="bg-[#C78283] p-4 rounded-2xl text-center">
-            <h3 class="text-xl font-bold text-white font-serif">⚡ AI Flashcard Hub</h3>
+            <h3 class="text-xl font-bold text-white font-serif">AI Flashcards</h3>
             <p class="text-xs text-white/90 mt-0.5">Test active memory with standard exams or smart prompts</p>
         </div>
 
         <!-- STAGE 1: Home - exam decks + AI topic generator -->
         <div id="fcHomeStage" class="space-y-6">
             <div class="space-y-2">
-                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Preloaded Premium Decks</span>
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Preloaded Premium
+                    Decks</span>
                 <div class="grid grid-cols-3 gap-2">
-                    <button onclick="openExam('JEE')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🚀 JEE</button>
-                    <button onclick="openExam('NEET')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">🩺 NEET</button>
-                    <button onclick="openExam('CAT')" class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">📈 CAT</button>
+                    <button onclick="openExam('JEE')"
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">JEE</button>
+                    <button onclick="openExam('NEET')"
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">NEET</button>
+                    <button onclick="openExam('CAT')"
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">CAT</button>
                 </div>
             </div>
 
             <div class="border-t border-slate-100 pt-4 space-y-2">
-                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Generate from custom topic via AI</label>
+                <label class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Generate flashcards of
+                    any topic</label>
                 <div class="flex gap-2">
                     <input type="text" id="fcTopicField" placeholder="e.g., Organic chemistry structural equations..."
                         class="flex-1 border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
-                    <button onclick="buildAIFlashcards()" id="fcGenBtn" class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer">Build</button>
+                    <button onclick="buildAIFlashcards()" id="fcGenBtn"
+                        class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer flex items-center justify-center">Build</button>
                 </div>
             </div>
 
             <div id="fcMyDecksSection" class="border-t border-slate-100 pt-4 space-y-2 hidden">
-                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Your Saved Decks</span>
-                <div id="fcMyDecksList" class="grid grid-cols-3 gap-2"></div>
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">Your Saved Flashcard
+                    Decks</span>
+                <div id="fcMyDecksList" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5"></div>
             </div>
         </div>
 
         <!-- STAGE 2: Subject / Chapter picker -->
         <div id="fcPickerStage" class="hidden space-y-3">
             <div class="flex items-center justify-between">
-                <button onclick="fcPickerBack()" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">← Back</button>
+                <button onclick="fcPickerBack()"
+                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Back</button>
                 <span id="fcPickerTitle" class="text-sm font-bold text-[#744253]"></span>
                 <span class="w-14"></span>
             </div>
@@ -164,24 +183,31 @@
         <!-- STAGE 3: Flashcard viewer -->
         <div id="flashcardDisplayStage" class="hidden space-y-4">
             <div class="flex items-center justify-between">
-                <button onclick="fcBackToChapters()" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">← Back</button>
+                <button onclick="fcBackToChapters()"
+                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Back</button>
                 <span id="fcActiveChapterLabel" class="text-sm font-bold text-[#744253]"></span>
                 <span class="w-14"></span>
             </div>
-            <div class="deck-view-perspective h-44 w-full cursor-pointer" onclick="this.classList.toggle('card-flipped')">
-                <div class="deck-inner-wrapper relative w-full h-full text-center transition-transform duration-500 transform-style-3d">
-                    <div class="absolute inset-0 bg-[#F3D9DC] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage">
+            <div class="deck-view-perspective h-44 w-full cursor-pointer"
+                onclick="this.classList.toggle('card-flipped')">
+                <div
+                    class="deck-inner-wrapper relative w-full h-full text-center transition-transform duration-500 transform-style-3d">
+                    <div
+                        class="absolute inset-0 bg-[#F3D9DC] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage">
                         <p id="cardFrontText" class="text-[#744253] font-bold text-sm"></p>
                     </div>
-                    <div class="absolute inset-0 bg-[#D7BEA8] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage face-rotate-y-180">
+                    <div
+                        class="absolute inset-0 bg-[#D7BEA8] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage face-rotate-y-180">
                         <p id="cardBackText" class="text-[#744253] font-medium text-sm"></p>
                     </div>
                 </div>
             </div>
             <div class="flex justify-between items-center px-2">
-                <button onclick="navigateDeck(-1)" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Previous</button>
+                <button onclick="navigateDeck(-1)"
+                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Previous</button>
                 <span id="deckCounter" class="text-xs font-mono font-bold text-slate-500">0 / 0</span>
-                <button onclick="navigateDeck(1)" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Next</button>
+                <button onclick="navigateDeck(1)"
+                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Next</button>
             </div>
         </div>
     </div>
@@ -189,35 +215,45 @@
     {% elif view == 'study' %}
     <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
         <div class="bg-[#744253] p-4 rounded-2xl text-center">
-            <h3 class="text-xl font-bold text-white font-serif">📝 AI SuperNotes & OCR</h3>
-            <p class="text-xs text-white/90 mt-0.5">Transform photos of handwritten notes into digital summaries</p>
+            <h3 class="text-xl font-bold text-white font-serif">AI SuperNotes & OCR</h3>
+            <p class="text-xs text-white/90 mt-0.5">Transform photos and pdfs of handwritten/digital notes into sharp
+                digital summaries</p>
         </div>
 
         <form id="studyOcrForm" enctype="multipart/form-data" class="space-y-4">
-            <div class="border-2 border-dashed border-[#B49286] bg-[#FFFBFB] rounded-xl p-6 text-center transition hover:bg-slate-50">
+            <div
+                class="border-2 border-dashed border-[#B49286] bg-[#FFFBFB] rounded-xl p-6 text-center transition hover:bg-slate-50">
                 <label class="block text-sm font-bold text-[#744253] cursor-pointer hover:underline">
-                    Capture or Upload Handwritten Pages
+                    Capture or Upload Notes (Images or PDF)
                     <input type="file" name="note_file" id="note_file_input" accept="image/*,.pdf" class="hidden">
                 </label>
-                <p id="note-file-name" class="text-xs text-slate-400 mt-1">No images parsed yet</p>
+                <p id="note-file-name" class="text-xs text-slate-400 mt-1">No images or PDFs parsed yet</p>
             </div>
-            <button type="submit" id="studyBtn" class="w-full bg-[#C78283] hover:bg-black text-white font-bold py-3.5 rounded-xl transition text-sm shadow-md cursor-pointer">
-                Process Note Streams
+            <button type="submit" id="studyBtn"
+                class="w-full bg-[#C78283] hover:bg-black text-white font-bold py-3.5 rounded-xl transition text-sm shadow-md cursor-pointer">
+                Process Notes
             </button>
             <p id="studyStatusMsg" class="hidden text-xs text-center text-[#744253] font-medium"></p>
         </form>
 
         <div id="ocrOutputContainer" class="hidden space-y-4 pt-4 border-t border-slate-100">
             <div>
-                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">📖 Digitized Core Text (OCR)</span>
-                <textarea id="rawOcrResult" readonly class="w-full h-32 text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-700 focus:outline-none"></textarea>
+                <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider mb-1">Digitized Core Text
+                    (OCR)</span>
+                <textarea id="rawOcrResult" readonly
+                    class="w-full h-32 text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-700 focus:outline-none"></textarea>
             </div>
             <div>
                 <div class="flex items-center justify-between mb-1">
-                    <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">⚡ SuperNotes Summary</span>
-                    <button id="downloadNoteBtn" class="text-xs font-bold text-white bg-[#744253] hover:bg-black px-3 py-1.5 rounded-lg transition cursor-pointer">⬇ Download PDF</button>
+                    <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">SuperNotes
+                        Summary</span>
+                    <button id="downloadNoteBtn"
+                        class="text-xs font-bold text-white bg-[#744253] hover:bg-black px-3 py-1.5 rounded-lg transition cursor-pointer">Download
+                        PDF</button>
                 </div>
-                <div id="formattedSummaryResult" class="summary-content max-w-none text-xs p-4 bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl text-slate-800 leading-relaxed"></div>
+                <div id="formattedSummaryResult"
+                    class="summary-content max-w-none text-xs p-4 bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl text-slate-800 leading-relaxed">
+                </div>
             </div>
         </div>
 
@@ -231,7 +267,11 @@
                 padding-bottom: 4px;
                 border-bottom: 1px solid #B49286;
             }
-            #formattedSummaryResult h4:first-child { margin-top: 0; }
+
+            #formattedSummaryResult h4:first-child {
+                margin-top: 0;
+            }
+
             #formattedSummaryResult strong {
                 display: block;
                 font-weight: 700;
@@ -239,16 +279,20 @@
                 margin-top: 8px;
                 margin-bottom: 2px;
             }
+
             #formattedSummaryResult ul {
                 list-style: disc;
                 padding-left: 1.25rem;
                 margin-bottom: 6px;
             }
-            #formattedSummaryResult li { margin-bottom: 2px; }
+
+            #formattedSummaryResult li {
+                margin-bottom: 2px;
+            }
         </style>
 
         <div class="pt-4 border-t border-slate-100 space-y-2">
-            <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">🗂 History</span>
+            <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">History</span>
             <div id="supernotesHistoryList" class="space-y-2">
                 <p class="text-xs text-slate-400">Loading history...</p>
             </div>
@@ -293,20 +337,24 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">First Name</label>
-                    <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{ current_user.first_name or '—' }}</p>
+                    <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{
+                        current_user.first_name or '—' }}</p>
                 </div>
                 <div>
                     <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">Last Name</label>
-                    <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{ current_user.last_name or '—' }}</p>
+                    <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{
+                        current_user.last_name or '—' }}</p>
                 </div>
             </div>
             <div>
                 <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">Phone</label>
-                <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{ current_user.phone or '—' }}</p>
+                <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{ current_user.phone
+                    or '—' }}</p>
             </div>
             <div>
                 <label class="block text-[10px] uppercase font-bold text-[#B49286] mb-0.5">Email Address</label>
-                <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{ current_user.email or '—' }}</p>
+                <p class="text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl">{{ current_user.email
+                    or '—' }}</p>
             </div>
         </div>
 
@@ -326,7 +374,8 @@
     <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
         <div class="flex items-center justify-between border-b border-[#F3D9DC] pb-3">
             <h3 class="text-xl font-bold text-[#744253]">Edit Details</h3>
-            <a href="/profile" class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">← Back</a>
+            <a href="/profile"
+                class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Back</a>
         </div>
 
         {% with messages = get_flashed_messages() %}
@@ -368,12 +417,14 @@
 
             {% if current_user.pending_email %}
             <div class="bg-[#F3D9DC]/40 border border-[#B49286] rounded-xl p-4 space-y-3">
-                <p class="text-xs text-slate-600">Enter the code sent to your new email (<strong>{{ current_user.pending_email }}</strong>) to finish verifying it.</p>
+                <p class="text-xs text-slate-600">Enter the code sent to your new email (<strong>{{
+                        current_user.pending_email }}</strong>) to finish verifying it.</p>
                 <form action="/profile/email/verify" method="POST" class="flex gap-2">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="otp" placeholder="6-digit code" maxlength="6" required
                         class="flex-1 text-sm font-semibold text-[#744253] bg-white p-2.5 rounded-xl border border-[#B49286] focus:outline-none">
-                    <button type="submit" class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Verify</button>
+                    <button type="submit"
+                        class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Verify</button>
                 </form>
                 <form action="/profile/email/cancel" method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -385,9 +436,11 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="email" name="new_email" placeholder="New email address" required
                     class="flex-1 text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
-                <button type="submit" class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Change</button>
+                <button type="submit"
+                    class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Change</button>
             </form>
-            <p class="text-[10px] text-slate-400">Current: {{ current_user.email }}. We'll send a verification code to the new address.</p>
+            <p class="text-[10px] text-slate-400">Current: {{ current_user.email }}. We'll send a verification code to
+                the new address.</p>
             {% endif %}
         </div>
     </div>
@@ -395,11 +448,26 @@
 </div>
 
 <style>
-    .deck-view-perspective { perspective: 1000px; }
-    .transform-style-3d { transform-style: preserve-3d; }
-    .backface-hidden-stage { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-    .face-rotate-y-180 { transform: rotateY(180deg); }
-    .card-flipped .deck-inner-wrapper { transform: rotateY(180deg); }
+    .deck-view-perspective {
+        perspective: 1000px;
+    }
+
+    .transform-style-3d {
+        transform-style: preserve-3d;
+    }
+
+    .backface-hidden-stage {
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+    }
+
+    .face-rotate-y-180 {
+        transform: rotateY(180deg);
+    }
+
+    .card-flipped .deck-inner-wrapper {
+        transform: rotateY(180deg);
+    }
 </style>
 
 <script nonce="{{ csp_nonce() }}">
@@ -450,26 +518,50 @@
     async function loadMyFlashcardDecks() {
         const section = document.getElementById('fcMyDecksSection');
         const list = document.getElementById('fcMyDecksList');
-        if(!section || !list) return;
+        if (!section || !list) return;
         try {
             const response = await fetch('/api/flashcards/my-decks');
             const payload = await response.json();
-            if(payload.success && payload.decks.length) {
+            if (payload.success && payload.decks.length) {
                 list.innerHTML = '';
                 payload.decks.forEach(deck => {
-                    const btn = document.createElement('button');
-                    btn.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-2 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm truncate";
-                    btn.title = deck.topic;
-                    btn.innerText = ` ${deck.topic}`;
-                    btn.onclick = () => openSavedDeck(deck.id, deck.topic);
-                    list.appendChild(btn);
+                    const item = document.createElement('div');
+                    item.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] rounded-xl p-2.5 shadow-sm hover:border-[#744253] transition flex items-center justify-between gap-2";
+                    const safeTopic = (deck.topic || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    item.innerHTML = `
+                        <button onclick="openSavedDeck(${deck.id}, '${safeTopic}')" class="flex-1 text-left font-bold text-xs truncate cursor-pointer hover:underline" title="${deck.topic}">
+                             ${deck.topic} <span class="text-[10px] opacity-70 font-mono">(${deck.count})</span>
+                        </button>
+                        <button onclick="deleteFlashcardDeck(${deck.id}, event)" title="Delete Flashcard Deck" class="p-1.5 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-lg transition cursor-pointer flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    `;
+                    list.appendChild(item);
                 });
                 section.classList.remove('hidden');
             } else {
                 section.classList.add('hidden');
             }
-        } catch(e) {
+        } catch (e) {
             section.classList.add('hidden');
+        }
+    }
+
+    async function deleteFlashcardDeck(deckId, event) {
+        if (event) event.stopPropagation();
+        if (!confirm("Are you sure you want to delete this saved flashcard deck?")) return;
+        try {
+            const res = await fetch(`/api/flashcards/my-decks/${deckId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                loadMyFlashcardDecks();
+            } else {
+                alert(data.error || "Could not delete flashcard deck.");
+            }
+        } catch (err) {
+            alert("Failed to delete flashcard deck. Please try again.");
         }
     }
 
@@ -477,7 +569,7 @@
         try {
             const response = await fetch(`/api/flashcards/my-decks/${deckId}`);
             const payload = await response.json();
-            if(payload.success && payload.deck.length) {
+            if (payload.success && payload.deck.length) {
                 localDeckStore = payload.deck;
                 currentCardCursor = 0;
                 fcCurrentSubject = null;
@@ -487,7 +579,7 @@
             } else {
                 alert("This saved deck has no flashcards.");
             }
-        } catch(e) {
+        } catch (e) {
             alert("Error trying to load your saved deck.");
         }
     }
@@ -496,14 +588,14 @@
         try {
             const response = await fetch(`/api/flashcards/structure?exam=${examKey}`);
             const payload = await response.json();
-            if(!payload.success || !Object.keys(payload.subjects).length) {
+            if (!payload.success || !Object.keys(payload.subjects).length) {
                 alert("No subjects found for this exam yet.");
                 return;
             }
             fcCurrentExam = examKey;
             fcCurrentSubjects = payload.subjects;
             renderSubjectPicker();
-        } catch(e) {
+        } catch (e) {
             alert("Error trying to load exam structure.");
         }
     }
@@ -530,7 +622,7 @@
         document.getElementById('fcPickerTitle').innerText = `${fcCurrentExam} — ${subject}`;
         const list = document.getElementById('fcPickerList');
         list.innerHTML = '';
-        fcCurrentSubjects[subject].forEach(({chapter, count}) => {
+        fcCurrentSubjects[subject].forEach(({ chapter, count }) => {
             const btn = document.createElement('button');
             btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm flex justify-between items-center";
             btn.innerHTML = `<span>${chapter}</span><span class="text-xs font-mono opacity-70">${count} cards</span>`;
@@ -540,7 +632,7 @@
     }
 
     function fcPickerBack() {
-        if(fcPickerLevel === 'chapter') {
+        if (fcPickerLevel === 'chapter') {
             renderSubjectPicker();
         } else {
             fcShowStage('fcHomeStage');
@@ -548,7 +640,7 @@
     }
 
     function fcBackToChapters() {
-        if(fcCurrentSubject) {
+        if (fcCurrentSubject) {
             openSubject(fcCurrentSubject);
             fcShowStage('fcPickerStage');
         } else {
@@ -561,7 +653,7 @@
             const params = new URLSearchParams({ exam: fcCurrentExam, subject: fcCurrentSubject, chapter });
             const response = await fetch(`/api/flashcards/preload?${params.toString()}`);
             const payload = await response.json();
-            if(payload.success && payload.deck.length) {
+            if (payload.success && payload.deck.length) {
                 localDeckStore = payload.deck;
                 currentCardCursor = 0;
                 document.getElementById('fcActiveChapterLabel').innerText = `${fcCurrentSubject} · ${chapter}`;
@@ -570,13 +662,13 @@
             } else {
                 alert("No flashcards found for this chapter yet.");
             }
-        } catch(e) {
+        } catch (e) {
             alert("Error trying to process preloaded assets.");
         }
     }
 
     function renderStageCard() {
-        if(!localDeckStore.length) return;
+        if (!localDeckStore.length) return;
         document.querySelector('.deck-view-perspective').classList.remove('card-flipped');
         document.getElementById('cardFrontText').innerText = localDeckStore[currentCardCursor].question;
         document.getElementById('cardBackText').innerText = localDeckStore[currentCardCursor].answer;
@@ -584,21 +676,37 @@
     }
 
     function navigateDeck(dir) {
-        if(!localDeckStore.length) return;
+        if (!localDeckStore.length) return;
         currentCardCursor += dir;
-        if(currentCardCursor < 0) currentCardCursor = localDeckStore.length - 1;
-        if(currentCardCursor >= localDeckStore.length) currentCardCursor = 0;
+        if (currentCardCursor < 0) currentCardCursor = localDeckStore.length - 1;
+        if (currentCardCursor >= localDeckStore.length) currentCardCursor = 0;
         renderStageCard();
     }
 
     async function buildAIFlashcards() {
         const inputField = document.getElementById('fcTopicField');
         const targetBtn = document.getElementById('fcGenBtn');
-        if(!inputField.value.trim()) return alert("Please clarify a target study topic prompt.");
+        if (!inputField.value.trim()) return alert("Please clarify a target study topic prompt.");
 
-        const savedText = targetBtn.innerText;
+        const savedHTML = targetBtn.innerHTML;
         targetBtn.disabled = true;
-        targetBtn.innerText = "⏳";
+
+        let anim = null;
+        const lottieUrl = "{{ url_for('static', filename='lottie/loading.json') }}";
+
+        targetBtn.innerHTML = `<span class="inline-flex items-center justify-center gap-1.5"><div id="fcBtnLottie" class="w-10 h-10 flex items-center justify-center"></div><span class="text-xs font-bold">Building...</span></span>`;
+        const container = document.getElementById('fcBtnLottie');
+        if (window.lottie && container) {
+            anim = window.lottie.loadAnimation({
+                container: container,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: lottieUrl
+            });
+        } else {
+            targetBtn.innerHTML = `<span class="inline-flex items-center justify-center gap-1.5"><lottie-player src="${lottieUrl}" background="transparent" speed="1" style="width: 40px; height: 40px;" loop autoplay></lottie-player><span class="text-xs font-bold">Building...</span></span>`;
+        }
 
         try {
             const res = await fetch('/api/flashcards/generate', {
@@ -607,7 +715,7 @@
                 body: JSON.stringify({ topic: inputField.value })
             });
             const out = await res.json();
-            if(out.success) {
+            if (out.success) {
                 localDeckStore = out.deck;
                 currentCardCursor = 0;
                 fcCurrentSubject = null;
@@ -618,22 +726,23 @@
             } else {
                 alert("AI Engine response failure: " + out.error);
             }
-        } catch(err) {
+        } catch (err) {
             alert("Network connectivity timeout reading generative flashcard values.");
         } finally {
+            if (anim) anim.destroy();
             targetBtn.disabled = false;
-            targetBtn.innerText = savedText;
+            targetBtn.innerHTML = savedHTML;
         }
     }
 
     const targetNoteInput = document.getElementById('note_file_input');
     const MAX_UPLOAD_BYTES = 60 * 1024 * 1024;
-    if(targetNoteInput) {
+    if (targetNoteInput) {
         targetNoteInput.addEventListener('change', e => {
             const chosenFile = e.target.files[0];
             document.getElementById('note-file-name').innerText = chosenFile?.name || "No images parsed yet";
-            if(chosenFile && chosenFile.size > MAX_UPLOAD_BYTES) {
-                alert(`That file is ${(chosenFile.size / (1024*1024)).toFixed(1)}MB, which is over the 60MB upload limit. Try a lower-resolution scan or split the document into smaller parts.`);
+            if (chosenFile && chosenFile.size > MAX_UPLOAD_BYTES) {
+                alert(`That file is ${(chosenFile.size / (1024 * 1024)).toFixed(1)}MB, which is over the 60MB upload limit. Try a lower-resolution scan or split the document into smaller parts.`);
                 targetNoteInput.value = "";
                 document.getElementById('note-file-name').innerText = "No images parsed yet";
             }
@@ -644,7 +753,7 @@
 
     function openPdfDownload(relativeUrl) {
         const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-        if(isNative) {
+        if (isNative) {
             window.Capacitor.Plugins.Browser.open({ url: window.location.origin + relativeUrl });
         } else {
             window.open(window.location.origin + relativeUrl, '_blank');
@@ -652,18 +761,18 @@
     }
 
     function downloadCurrentNote() {
-        if(!currentNoteId) return;
+        if (!currentNoteId) return;
         openPdfDownload(`/api/study/notes/${currentNoteId}/pdf`);
     }
 
     const downloadBtn = document.getElementById('downloadNoteBtn');
-    if(downloadBtn) {
+    if (downloadBtn) {
         downloadBtn.addEventListener('click', downloadCurrentNote);
     }
 
     function historyRowHTML(note) {
         const dateStr = new Date(note.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        if(note.status === 'processing') {
+        if (note.status === 'processing') {
             return `
                 <div class="min-w-0">
                     <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
@@ -672,7 +781,7 @@
                 <span class="text-[10px] font-bold text-amber-600 shrink-0">Please wait</span>
             `;
         }
-        if(note.status === 'failed') {
+        if (note.status === 'failed') {
             return `
                 <div class="min-w-0">
                     <p class="text-xs font-bold text-[#744253] truncate">${note.title}</p>
@@ -695,11 +804,11 @@
 
     async function loadNotesHistory() {
         const listEl = document.getElementById('supernotesHistoryList');
-        if(!listEl) return;
+        if (!listEl) return;
         try {
             const res = await fetch('/api/study/notes/history');
             const data = await res.json();
-            if(!data.success || !data.notes.length) {
+            if (!data.success || !data.notes.length) {
                 listEl.innerHTML = '<p class="text-xs text-slate-400">No SuperNotes yet — process a note above to get started.</p>';
                 return;
             }
@@ -708,14 +817,14 @@
                 const row = document.createElement('div');
                 row.className = "flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2";
                 row.innerHTML = historyRowHTML(note);
-                if(note.status === 'complete') {
+                if (note.status === 'complete') {
                     const [viewBtn, dlBtn] = row.querySelectorAll('button');
                     viewBtn.onclick = () => viewHistoryNote(note.id);
                     dlBtn.onclick = () => openPdfDownload(`/api/study/notes/${note.id}/pdf`, note.id);
                 }
                 listEl.appendChild(row);
             });
-        } catch(e) {
+        } catch (e) {
             listEl.innerHTML = '<p class="text-xs text-red-400">Could not load history.</p>';
         }
     }
@@ -724,13 +833,13 @@
         try {
             const res = await fetch(`/api/study/notes/${noteId}`);
             const data = await res.json();
-            if(!data.success || data.status !== 'complete') return alert("This note isn't ready yet.");
+            if (!data.success || data.status !== 'complete') return alert("This note isn't ready yet.");
             currentNoteId = noteId;
             document.getElementById('rawOcrResult').value = data.digitized_text;
             document.getElementById('formattedSummaryResult').innerHTML = data.summary;
             document.getElementById('ocrOutputContainer').classList.remove('hidden');
             document.getElementById('ocrOutputContainer').scrollIntoView({ behavior: 'smooth' });
-        } catch(e) {
+        } catch (e) {
             alert("Could not load that note.");
         }
     }
@@ -744,32 +853,32 @@
             try {
                 const res = await fetch(`/api/study/notes/${noteId}/status`);
                 const data = await res.json();
-                if(!data.success) return;
-                if(data.status === 'complete') {
+                if (!data.success) return;
+                if (data.status === 'complete') {
                     clearInterval(interval);
                     statusMsg.classList.add('hidden');
                     viewHistoryNote(noteId);
                     loadNotesHistory();
-                } else if(data.status === 'failed') {
+                } else if (data.status === 'failed') {
                     clearInterval(interval);
                     statusMsg.classList.add('hidden');
                     alert("Analysis Failed: " + (data.error || "Unknown error."));
                     loadNotesHistory();
                 }
-            } catch(e) { /* keep polling silently on transient network errors */ }
+            } catch (e) { /* keep polling silently on transient network errors */ }
         }, 4000);
     }
 
-    if(document.getElementById('supernotesHistoryList')) {
+    if (document.getElementById('supernotesHistoryList')) {
         loadNotesHistory();
     }
 
     const noteSubmissionForm = document.getElementById('studyOcrForm');
-    if(noteSubmissionForm) {
+    if (noteSubmissionForm) {
         noteSubmissionForm.addEventListener('submit', async e => {
             e.preventDefault();
             const referenceInput = document.getElementById('note_file_input');
-            if(!referenceInput.files.length) return alert("Please upload notes files/photos.");
+            if (!referenceInput.files.length) return alert("Please upload notes files/photos.");
 
             const actionBtn = document.getElementById('studyBtn');
             const nativeHTML = actionBtn.innerHTML;
@@ -782,13 +891,13 @@
             try {
                 const response = await fetch('/api/study/process-notes', { method: 'POST', body: activeData });
                 const jsonResult = await response.json();
-                if(jsonResult.success) {
+                if (jsonResult.success) {
                     loadNotesHistory();
                     pollNoteStatus(jsonResult.note_id);
                 } else {
                     alert("Analysis Failed: " + jsonResult.error);
                 }
-            } catch(ex) {
+            } catch (ex) {
                 alert("Server execution failure: " + ex.message);
             } finally {
                 actionBtn.disabled = false;
@@ -833,7 +942,7 @@
                     const text = await res.text();
                     data = {
                         success: false,
-                        error: res.status === 504 
+                        error: res.status === 504
                             ? "Generation timed out on the server. Try generating fewer questions (e.g. 10-20) or choosing a smaller input."
                             : "Server returned an unexpected error. Please try again."
                     };
@@ -885,7 +994,7 @@
             } else {
                 alert(data.error || "Could not delete quiz.");
             }
-        } catch(err) {
+        } catch (err) {
             alert("Failed to delete quiz. Please try again.");
         }
     }

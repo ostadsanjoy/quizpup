@@ -1,8 +1,7 @@
 from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 
-db = SQLAlchemy()
+from extensions import db
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -69,4 +68,4 @@ class SuperNote(db.Model):
     digitized_text = db.Column(db.Text, nullable=True)
     summary_html = db.Column(db.Text, nullable=True)
     pdf_data = db.Column(db.LargeBinary, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
