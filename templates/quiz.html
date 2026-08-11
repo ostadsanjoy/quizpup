@@ -1,7 +1,25 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+    .quiz-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background-color: rgba(215, 190, 168, 0.78);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid #B49286;
+        border-top-color: rgba(255, 255, 255, 0.5); /* bright top edge catching the material's light */
+    }
+    @media (prefers-reduced-transparency: reduce) {
+        .quiz-toolbar { background-color: #D7BEA8; backdrop-filter: none; -webkit-backdrop-filter: none; }
+    }
+    @media (prefers-contrast: more) {
+        .quiz-toolbar { background-color: #D7BEA8; backdrop-filter: none; -webkit-backdrop-filter: none; border-top: 2px solid #744253; }
+    }
+</style>
 <div id="quiz-workspace" class="p-5 space-y-6">
-    <div class="bg-[#D7BEA8] border border-[#B49286] p-4 rounded-2xl shadow-sm space-y-3">
+    <div class="quiz-toolbar p-4 rounded-2xl shadow-sm space-y-3">
         <div class="flex justify-between items-center">
             <div>
                 <h3 class="text-lg font-serif font-bold text-[#744253]">{{ session.topic }}</h3>
@@ -12,7 +30,7 @@
             </div>
         </div>
         <div class="flex justify-between items-center pt-2.5 border-t border-[#B49286]/30">
-            <button id="quitExamBtn" onclick="quitExam()" class="px-3.5 py-1.5 bg-[#F3D9DC] text-[#744253] border border-[#B49286] rounded-xl text-xs font-semibold hover:bg-[#EBC4C8] transition cursor-pointer">Quit Exam</button>
+            <button id="quitExamBtn" onclick="quitExam()" class="px-3.5 py-1.5 bg-[#F3D9DC] text-[#744253] border border-[#B49286] rounded-xl text-xs font-semibold hover:bg-[#EBC4C8] active:bg-[#EBC4C8] active:scale-[0.97] transition duration-100 cursor-pointer">Quit Exam</button>
             <button id="headerSubmitBtn" onclick="confirmAndSubmitQuiz()" class="btn-primary px-4 py-1.5 rounded-xl text-xs font-semibold cursor-pointer">Submit</button>
         </div>
     </div>
@@ -41,7 +59,7 @@
 
 <div id="analytics-report-card" class="hidden space-y-6 bg-white border border-[#B49286] p-6 rounded-3xl shadow-sm m-5">
     <h3 class="text-2xl font-serif font-bold text-[#744253] reveal-in">Quiz Summary Report</h3>
-    <p class="text-lg font-semibold text-[#744253] reveal-in">Total Score: <span id="score-data-val" class="font-black text-[#C78283] text-2xl font-mono"></span></p>
+    <p class="text-lg font-semibold text-[#744253] reveal-in">Total Score: <span id="score-data-val" class="font-black text-[#C78283] text-2xl font-mono tracking-tight"></span></p>
     
     <div class="p-4 bg-[#F3D9DC] border border-[#B49286] rounded-2xl reveal-in reveal-in-delay">
         <h4 class="text-xs font-bold text-[#744253] uppercase mb-1">Improvement Suggestions</h4>

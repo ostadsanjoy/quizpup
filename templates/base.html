@@ -75,17 +75,48 @@
             -webkit-overflow-scrolling: touch;
         }
 
+        /* Reserve space equal to the now-fixed nav's height, only when it renders */
+        .main-content.has-bottom-nav {
+            padding-bottom: calc(80px + env(safe-area-inset-bottom));
+        }
+
         .bottom-nav-bar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
             width: 100%;
             height: 80px;
-            background-color: #D7BEA8;
-            border-top: 1px solid #B49286;
+            /* Translucent material: content scrolls underneath and shows through,
+               like an iOS tab bar — not a flat opaque strip. */
+            background-color: rgba(215, 190, 168, 0.72);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-top: 1px solid rgba(255, 255, 255, 0.5); /* bright top edge = light catching the material */
             display: flex;
             justify-content: space-around;
             align-items: center;
             padding-bottom: env(safe-area-inset-bottom);
             box-sizing: border-box;
             flex-shrink: 0;
+            z-index: 40;
+        }
+
+        @media (prefers-reduced-transparency: reduce) {
+            .bottom-nav-bar {
+                background-color: #D7BEA8;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+            }
+        }
+
+        @media (prefers-contrast: more) {
+            .bottom-nav-bar {
+                background-color: #D7BEA8;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                border-top: 2px solid #744253;
+            }
         }
 
         @font-face {
@@ -284,7 +315,7 @@
     </script>
     <div class="app-container">
 
-        <main class="main-content">
+        <main class="main-content{% if current_user.is_authenticated and not hide_bottom_nav and view != 'quiz' %} has-bottom-nav{% endif %}">
             {% block content %}{% endblock %}
         </main>
 
