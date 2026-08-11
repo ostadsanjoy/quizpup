@@ -64,7 +64,7 @@
 
     <div id="quizFormSection" class="hidden bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
         <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">Back to
+            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">⬅ Back to
                 Feed</button>
             <span class="text-xs uppercase font-mono tracking-widest text-[#B49286] font-bold">Quiz Setup</span>
         </div>
@@ -143,11 +143,11 @@
                     Decks</span>
                 <div class="grid grid-cols-3 gap-2">
                     <button onclick="openExam('JEE')"
-                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">JEE</button>
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm">JEE</button>
                     <button onclick="openExam('NEET')"
-                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">NEET</button>
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm">NEET</button>
                     <button onclick="openExam('CAT')"
-                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm">CAT</button>
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm">CAT</button>
                 </div>
             </div>
 
@@ -491,14 +491,29 @@
         });
     }
 
+    function fadeOutThenHide(el) {
+        if (!el || el.classList.contains('hidden')) return;
+        el.classList.add('fade-swap', 'fade-swap-out');
+        setTimeout(() => el.classList.add('hidden'), 200);
+    }
+
+    function fadeIn(el) {
+        el.classList.add('fade-swap');
+        el.classList.remove('hidden');
+        el.classList.add('fade-swap-out'); // start transparent...
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => el.classList.remove('fade-swap-out')); // ...then fade in
+        });
+    }
+
     function switchToQuizForm() {
-        document.getElementById('homeFeedSection').classList.add('hidden');
-        document.getElementById('quizFormSection').classList.remove('hidden');
+        fadeOutThenHide(document.getElementById('homeFeedSection'));
+        fadeIn(document.getElementById('quizFormSection'));
     }
 
     function switchToFeed() {
-        document.getElementById('quizFormSection').classList.add('hidden');
-        document.getElementById('homeFeedSection').classList.remove('hidden');
+        fadeOutThenHide(document.getElementById('quizFormSection'));
+        fadeIn(document.getElementById('homeFeedSection'));
     }
 
     function setQCount(val) {
@@ -523,8 +538,9 @@
 
     function fcShowStage(stageId) {
         ['fcHomeStage', 'fcPickerStage', 'flashcardDisplayStage'].forEach(id => {
-            document.getElementById(id).classList.toggle('hidden', id !== stageId);
+            if (id !== stageId) fadeOutThenHide(document.getElementById(id));
         });
+        fadeIn(document.getElementById(stageId));
     }
 
     async function loadMyFlashcardDecks() {
@@ -538,7 +554,7 @@
                 list.innerHTML = '';
                 payload.decks.forEach(deck => {
                     const item = document.createElement('div');
-                    item.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] rounded-xl p-2.5 shadow-sm hover:border-[#744253] transition flex items-center justify-between gap-2";
+                    item.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] rounded-xl p-2.5 shadow-sm hover:border-[#744253] active:scale-[0.98] active:border-[#744253] transition duration-100 flex items-center justify-between gap-2";
                     const safeTopic = (deck.topic || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     item.innerHTML = `
                         <button onclick="openSavedDeck(${deck.id}, '${safeTopic}')" class="flex-1 text-left font-bold text-xs truncate cursor-pointer hover:underline" title="${deck.topic}">
@@ -620,7 +636,7 @@
         Object.keys(fcCurrentSubjects).forEach(subject => {
             const chapterCount = fcCurrentSubjects[subject].length;
             const btn = document.createElement('button');
-            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm flex justify-between items-center";
+            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm flex justify-between items-center";
             btn.innerHTML = `<span>${subject}</span><span class="text-xs font-mono opacity-70">${chapterCount} chapters</span>`;
             btn.onclick = () => openSubject(subject);
             list.appendChild(btn);
@@ -636,7 +652,7 @@
         list.innerHTML = '';
         fcCurrentSubjects[subject].forEach(({ chapter, count }) => {
             const btn = document.createElement('button');
-            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white transition shadow-sm flex justify-between items-center";
+            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm flex justify-between items-center";
             btn.innerHTML = `<span>${chapter}</span><span class="text-xs font-mono opacity-70">${count} cards</span>`;
             btn.onclick = () => openChapter(chapter);
             list.appendChild(btn);
@@ -701,8 +717,10 @@
         const press = document.getElementById('fcCardPress');
         const stage = document.getElementById('fcCardStage');
         const inner = document.getElementById('fcCardInner');
+        if (!stage || !inner || !press) return; // this markup only exists on the flashcards view
+
         const back = stage.querySelector('.face-rotate-y-180');
-        if (!stage || !inner) return;
+        if (!back) return;
 
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -978,7 +996,7 @@
                 <p class="text-[10px] text-slate-400">${dateStr}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-                <button class="text-[10px] font-bold text-[#744253] bg-white border border-[#B49286] px-2.5 py-1.5 rounded-lg hover:bg-[#744253] hover:text-white transition">View</button>
+                <button class="text-[10px] font-bold text-[#744253] bg-white border border-[#B49286] px-2.5 py-1.5 rounded-lg hover:bg-[#744253] hover:text-white active:scale-[0.95] active:bg-[#744253] active:text-white transition duration-100">View</button>
                 <button class="btn-primary text-[10px] font-bold px-2.5 py-1.5 rounded-lg">⬇</button>
                 ${deleteRowBtnHTML(note.id)}
             </div>
@@ -1045,8 +1063,8 @@
 
     function pollNoteStatus(noteId) {
         const statusMsg = document.getElementById('studyStatusMsg');
-        statusMsg.classList.remove('hidden');
         statusMsg.innerText = "Processing in the background — large documents can take a few minutes. Feel free to navigate away; check History when you're back.";
+        fadeIn(statusMsg);
 
         const interval = setInterval(async () => {
             try {
@@ -1055,12 +1073,12 @@
                 if (!data.success) return;
                 if (data.status === 'complete') {
                     clearInterval(interval);
-                    statusMsg.classList.add('hidden');
+                    fadeOutThenHide(statusMsg);
                     viewHistoryNote(noteId);
                     loadNotesHistory();
                 } else if (data.status === 'failed') {
                     clearInterval(interval);
-                    statusMsg.classList.add('hidden');
+                    fadeOutThenHide(statusMsg);
                     alert("Analysis Failed: " + (data.error || "Unknown error."));
                     loadNotesHistory();
                 }

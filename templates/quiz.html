@@ -17,7 +17,7 @@
         </div>
     </div>
 
-    <div class="bg-white border border-[#B49286] p-6 rounded-3xl shadow-sm">
+    <div id="questionCard" class="bg-white border border-[#B49286] p-6 rounded-3xl shadow-sm">
         <div id="question-header" class="text-sm font-bold text-[#C78283] mb-2 uppercase tracking-wide"></div>
         <p id="question-body-text" class="text-base text-[#744253] font-semibold mb-6"></p>
         
@@ -40,15 +40,15 @@
 </div>
 
 <div id="analytics-report-card" class="hidden space-y-6 bg-white border border-[#B49286] p-6 rounded-3xl shadow-sm m-5">
-    <h3 class="text-2xl font-serif font-bold text-[#744253]">Quiz Summary Report</h3>
-    <p class="text-lg font-semibold text-[#744253]">Total Score: <span id="score-data-val" class="font-black text-[#C78283] text-2xl font-mono"></span></p>
+    <h3 class="text-2xl font-serif font-bold text-[#744253] reveal-in">Quiz Summary Report</h3>
+    <p class="text-lg font-semibold text-[#744253] reveal-in">Total Score: <span id="score-data-val" class="font-black text-[#C78283] text-2xl font-mono"></span></p>
     
-    <div class="p-4 bg-[#F3D9DC] border border-[#B49286] rounded-2xl">
+    <div class="p-4 bg-[#F3D9DC] border border-[#B49286] rounded-2xl reveal-in reveal-in-delay">
         <h4 class="text-xs font-bold text-[#744253] uppercase mb-1">Improvement Suggestions</h4>
         <p id="recommendation-box-string" class="text-sm text-[#744253] leading-relaxed"></p>
     </div>
     
-    <div class="flex flex-col sm:flex-row gap-3 pt-2">
+    <div class="flex flex-col sm:flex-row gap-3 pt-2 reveal-in reveal-in-delay">
         <button onclick="revealExplanationsWorkflow()" class="btn-accent flex-1 font-semibold py-3 px-4 rounded-2xl text-sm shadow-sm cursor-pointer text-center">Review Answers & Explanations</button>
         <a href="/home" class="btn-primary flex-1 font-semibold py-3 px-4 rounded-2xl text-sm shadow-sm cursor-pointer text-center flex items-center justify-center gap-2">Go to Home</a>
     </div>
@@ -64,6 +64,21 @@ let clockLoop;
 let reviewMode = false;
 let globalExplanations = {};
 
+function revealResultsCard() {
+    const card = document.getElementById('analytics-report-card');
+    document.getElementById('quiz-workspace').classList.add('hidden');
+    card.classList.remove('hidden');
+    const nodes = card.querySelectorAll('.reveal-in');
+    nodes.forEach(n => n.classList.remove('reveal-in-active'));
+    // Double rAF: let the browser paint the opacity:0 start state first,
+    // otherwise the transition to reveal-in-active can get coalesced away.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            nodes.forEach(n => n.classList.add('reveal-in-active'));
+        });
+    });
+}
+
 async function startEngine() {
     const res = await fetch('/api/quiz/{{ session.id }}/questions');
     const data = await res.json();
@@ -74,10 +89,9 @@ async function startEngine() {
         reviewMode = true;
         globalExplanations = data.explanations;
         
-        document.getElementById('quiz-workspace').classList.add('hidden');
-        document.getElementById('analytics-report-card').classList.remove('hidden');
         document.getElementById('score-data-val').innerText = `${data.score} / ${data.total}`;
         document.getElementById('recommendation-box-string').innerText = data.recommendation;
+        revealResultsCard();
     } else {
         secondsLeft = data.seconds_remaining !== undefined ? data.seconds_remaining : (data.duration * 60);
         configureHintsIndicator(data.difficulty, data.hints_remaining);
@@ -230,7 +244,15 @@ function moveSlide(offset) {
         return; 
     }
     cursor += offset;
-    showQuestion();
+    // Fast, subtle crossfade — this fires many times per session, so it must
+    // read as instant, not as a transition. Answer-selection re-renders
+    // (logSelection/clearCurrentChoice) intentionally skip this and stay sync.
+    const card = document.getElementById('questionCard');
+    card.classList.add('fade-fast', 'fade-fast-out');
+    setTimeout(() => {
+        showQuestion();
+        card.classList.remove('fade-fast-out');
+    }, 120);
 }
 
 async function requestHintPayload() {
@@ -267,10 +289,9 @@ async function completeQuizSession() {
     const data = await res.json();
     globalExplanations = data.explanations;
     
-    document.getElementById('quiz-workspace').classList.add('hidden');
-    document.getElementById('analytics-report-card').classList.remove('hidden');
     document.getElementById('score-data-val').innerText = `${data.score} / ${data.total}`;
     document.getElementById('recommendation-box-string').innerText = data.recommendation;
+    revealResultsCard();
 }
 
 function revealExplanationsWorkflow() {
