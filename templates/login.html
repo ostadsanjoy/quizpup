@@ -9,14 +9,16 @@
         </div>
 
         <div>
-            <h2 class="text-3xl font-serif font-bold text-[#744253]">{{ action }} Platform</h2>
+            <h2 class="text-3xl font-serif font-bold tracking-tight text-[#744253]">{{ action }} Platform</h2>
             <p class="text-xs text-[#B49286] font-medium mt-1">Welcome to your AI-powered study space</p>
         </div>
 
         {% with messages = get_flashed_messages() %}
         {% if messages %}
         {% for message in messages %}
-        <div class="text-xs bg-rose-50 border border-rose-200 text-rose-600 p-2.5 rounded-xl font-medium">{{ message }}
+        <div class="text-xs p-2.5 rounded-xl font-medium"
+            style="background-color: var(--color-danger-bg); border: 1px solid var(--color-danger-border); color: var(--color-danger-text);">
+            {{ message }}
         </div>
         {% endfor %}
         {% endif %}
@@ -24,7 +26,7 @@
 
         <div class="space-y-3">
             <button type="button" id="googleOauthBtn"
-                class="w-full flex items-center justify-center gap-2 border border-[#B49286] bg-white hover:bg-[#FFFBFB] text-[#744253] font-bold py-3 rounded-xl transition text-sm">
+                class="w-full flex items-center justify-center gap-2 border border-[#B49286] bg-white hover:bg-[#FFFBFB] active:bg-[#F3D9DC] active:scale-[0.98] text-[#744253] font-bold py-3 rounded-xl transition duration-100 text-sm">
                 <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
                     <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/>
                     <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.83.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.33A9 9 0 0 0 9 18z"/>
@@ -34,7 +36,7 @@
                 Continue with Google
             </button>
             <button type="button" id="githubOauthBtn"
-                class="w-full flex items-center justify-center gap-2 border border-[#B49286] bg-white hover:bg-[#FFFBFB] text-[#744253] font-bold py-3 rounded-xl transition text-sm">
+                class="w-full flex items-center justify-center gap-2 border border-[#B49286] bg-white hover:bg-[#FFFBFB] active:bg-[#F3D9DC] active:scale-[0.98] text-[#744253] font-bold py-3 rounded-xl transition duration-100 text-sm">
                 <svg width="18" height="18" viewBox="0 0 16 16" fill="#744253" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
                 </svg>
@@ -98,25 +100,25 @@
                     {% endif %}
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                 {% if action == "Register" %}
-                <p class="text-[10px] text-slate-400 mt-1">At least 8 characters, with a letter, a number, and a special character.</p>
+                <p class="text-[10px] mt-1" style="color: var(--color-neutral-text);">At least 8 characters, with a letter, a number, and a special character.</p>
                 {% endif %}
             </div>
 
             <div class="flex justify-end items-center mt-2 text-xs">
-                <a href="/forgot-password" class="text-brown-600 hover:underline text-slate-500 font-medium">Forgot Password?</a>
+                <a href="/forgot-password" class="hover:underline active:opacity-70 font-medium" style="color: var(--color-neutral-text);">Forgot Password?</a>
             </div>
             <button type="submit"
-                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm mt-2">
+                class="btn-primary w-full font-bold py-3.5 rounded-xl shadow-md text-sm mt-2">
                 {{ action }} Session
             </button>
         </form>
 
         <div class="text-xs font-medium text-[#B49286]">
             {% if action == "Login" %}
-            Don't have an account? <a href="/register" class="text-[#744253] font-bold hover:underline">Register
+            Don't have an account? <a href="/register" class="text-[#744253] font-bold hover:underline active:opacity-70">Register
                 Here</a>
             {% else %}
-            Already have an account? <a href="/login" class="text-[#744253] font-bold hover:underline">Login Here</a>
+            Already have an account? <a href="/login" class="text-[#744253] font-bold hover:underline active:opacity-70">Login Here</a>
             {% endif %}
         </div>
     </div>

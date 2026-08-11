@@ -13,7 +13,7 @@
         </div>
         <div class="flex justify-between items-center pt-2.5 border-t border-[#B49286]/30">
             <button id="quitExamBtn" onclick="quitExam()" class="px-3.5 py-1.5 bg-[#F3D9DC] text-[#744253] border border-[#B49286] rounded-xl text-xs font-semibold hover:bg-[#EBC4C8] transition cursor-pointer">Quit Exam</button>
-            <button id="headerSubmitBtn" onclick="confirmAndSubmitQuiz()" class="px-4 py-1.5 bg-[#744253] text-white rounded-xl text-xs font-semibold hover:bg-[#5a3240] transition cursor-pointer">Submit</button>
+            <button id="headerSubmitBtn" onclick="confirmAndSubmitQuiz()" class="btn-primary px-4 py-1.5 rounded-xl text-xs font-semibold cursor-pointer">Submit</button>
         </div>
     </div>
 
@@ -33,9 +33,9 @@
         <button id="prevBtn" onclick="moveSlide(-1)" class="px-4 py-2 bg-[#F3D9DC] text-[#744253] border border-[#B49286] rounded-xl text-sm font-semibold hover:bg-[#EBC4C8] disabled:opacity-50 cursor-pointer">Previous</button>
         <div class="flex gap-2">
             <button id="clearBtn" onclick="clearCurrentChoice()" class="px-4 py-2 border border-[#B49286] text-[#744253] rounded-xl text-sm font-medium hover:bg-[#F3D9DC]/40 cursor-pointer">Clear Answer</button>
-            <button id="hintTriggerBtn" onclick="requestHintPayload()" class="px-4 py-2 bg-[#C78283] text-white rounded-xl text-sm font-semibold hover:bg-[#b06f70] shadow-sm hidden cursor-pointer">Hint</button>
+            <button id="hintTriggerBtn" onclick="requestHintPayload()" class="btn-accent px-4 py-2 rounded-xl text-sm font-semibold shadow-sm hidden cursor-pointer">Hint</button>
         </div>
-        <button id="nextBtn" onclick="moveSlide(1)" class="px-4 py-2 bg-[#744253] text-white rounded-xl text-sm font-semibold hover:bg-[#5a3240] shadow-sm cursor-pointer">Next</button>
+        <button id="nextBtn" onclick="moveSlide(1)" class="btn-primary px-4 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer">Next</button>
     </div>
 </div>
 
@@ -49,8 +49,8 @@
     </div>
     
     <div class="flex flex-col sm:flex-row gap-3 pt-2">
-        <button onclick="revealExplanationsWorkflow()" class="flex-1 bg-[#C78283] text-white font-semibold py-3 px-4 rounded-2xl hover:bg-[#b06f70] transition text-sm shadow-sm cursor-pointer text-center">Review Answers & Explanations</button>
-        <a href="/home" class="flex-1 bg-[#744253] text-white font-semibold py-3 px-4 rounded-2xl hover:bg-[#5a3240] transition text-sm shadow-sm cursor-pointer text-center flex items-center justify-center gap-2">Go to Home</a>
+        <button onclick="revealExplanationsWorkflow()" class="btn-accent flex-1 font-semibold py-3 px-4 rounded-2xl text-sm shadow-sm cursor-pointer text-center">Review Answers & Explanations</button>
+        <a href="/home" class="btn-primary flex-1 font-semibold py-3 px-4 rounded-2xl text-sm shadow-sm cursor-pointer text-center flex items-center justify-center gap-2">Go to Home</a>
     </div>
 </div>
 

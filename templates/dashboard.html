@@ -20,7 +20,7 @@
         <div class="bg-[#C78283] p-4 rounded-3xl flex justify-between items-center shadow-sm">
             <h3 class="text-2xl font-serif font-bold text-white pl-2">Past Quizzes</h3>
             <button onclick="switchToQuizForm()"
-                class="bg-[#744253] text-white text-xs font-semibold px-4 py-2.5 rounded-full hover:bg-black transition shadow-md cursor-pointer">
+                class="btn-primary text-xs font-semibold px-4 py-2.5 rounded-full shadow-md cursor-pointer">
                 Create New Quiz
             </button>
         </div>
@@ -44,7 +44,7 @@
                             }}</span>
                     </a>
                     <button onclick="deleteQuizSession({{ q.id }}, event)" title="Delete Quiz"
-                        class="p-2 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-xl transition cursor-pointer">
+                        class="btn-danger-ghost p-2 rounded-xl cursor-pointer">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -64,7 +64,7 @@
 
     <div id="quizFormSection" class="hidden bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
         <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">⬅ Back to
+            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">Back to
                 Feed</button>
             <span class="text-xs uppercase font-mono tracking-widest text-[#B49286] font-bold">Quiz Setup</span>
         </div>
@@ -123,7 +123,7 @@
             </div>
 
             <button type="submit" id="genBtn"
-                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm cursor-pointer">
+                class="btn-primary w-full font-bold py-3.5 rounded-xl shadow-md text-sm cursor-pointer">
                 Start Quiz
             </button>
         </form>
@@ -158,7 +158,7 @@
                     <input type="text" id="fcTopicField" placeholder="e.g., Organic chemistry structural equations..."
                         class="flex-1 border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                     <button onclick="buildAIFlashcards()" id="fcGenBtn"
-                        class="bg-[#744253] hover:bg-black text-white px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer flex items-center justify-center">Build</button>
+                        class="btn-primary px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer flex items-center justify-center">Build</button>
                 </div>
             </div>
 
@@ -173,7 +173,7 @@
         <div id="fcPickerStage" class="hidden space-y-3">
             <div class="flex items-center justify-between">
                 <button onclick="fcPickerBack()"
-                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Back</button>
+                    class="btn-secondary text-xs font-bold px-3 py-1.5 rounded-lg">Back</button>
                 <span id="fcPickerTitle" class="text-sm font-bold text-[#744253]"></span>
                 <span class="w-14"></span>
             </div>
@@ -184,30 +184,31 @@
         <div id="flashcardDisplayStage" class="hidden space-y-4">
             <div class="flex items-center justify-between">
                 <button onclick="fcBackToChapters()"
-                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Back</button>
+                    class="btn-secondary text-xs font-bold px-3 py-1.5 rounded-lg">Back</button>
                 <span id="fcActiveChapterLabel" class="text-sm font-bold text-[#744253]"></span>
                 <span class="w-14"></span>
             </div>
-            <div class="deck-view-perspective h-44 w-full cursor-pointer"
-                onclick="this.classList.toggle('card-flipped')">
-                <div
-                    class="deck-inner-wrapper relative w-full h-full text-center transition-transform duration-500 transform-style-3d">
-                    <div
-                        class="absolute inset-0 bg-[#F3D9DC] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage">
-                        <p id="cardFrontText" class="text-[#744253] font-bold text-sm"></p>
-                    </div>
-                    <div
-                        class="absolute inset-0 bg-[#D7BEA8] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage face-rotate-y-180">
-                        <p id="cardBackText" class="text-[#744253] font-medium text-sm"></p>
+            <div id="fcCardPress" class="deck-press-wrapper h-44 w-full">
+                <div id="fcCardStage" class="deck-view-perspective h-full w-full cursor-grab">
+                    <div id="fcCardInner"
+                        class="deck-inner-wrapper relative w-full h-full text-center transform-style-3d">
+                        <div
+                            class="absolute inset-0 bg-[#F3D9DC] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage">
+                            <p id="cardFrontText" class="text-[#744253] font-bold text-sm"></p>
+                        </div>
+                        <div
+                            class="absolute inset-0 bg-[#D7BEA8] border border-[#B49286] rounded-2xl flex items-center justify-center p-4 backface-hidden-stage face-rotate-y-180">
+                            <p id="cardBackText" class="text-[#744253] font-medium text-sm"></p>
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="flex justify-between items-center px-2">
                 <button onclick="navigateDeck(-1)"
-                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Previous</button>
+                    class="btn-secondary text-xs font-bold px-3 py-1.5 rounded-lg">Previous</button>
                 <span id="deckCounter" class="text-xs font-mono font-bold text-slate-500">0 / 0</span>
                 <button onclick="navigateDeck(1)"
-                    class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Next</button>
+                    class="btn-secondary text-xs font-bold px-3 py-1.5 rounded-lg">Next</button>
             </div>
         </div>
     </div>
@@ -230,7 +231,7 @@
                 <p id="note-file-name" class="text-xs text-slate-400 mt-1">No images or PDFs parsed yet</p>
             </div>
             <button type="submit" id="studyBtn"
-                class="w-full bg-[#C78283] hover:bg-black text-white font-bold py-3.5 rounded-xl transition text-sm shadow-md cursor-pointer">
+                class="btn-accent w-full font-bold py-3.5 rounded-xl text-sm shadow-md cursor-pointer">
                 Process Notes
             </button>
             <p id="studyStatusMsg" class="hidden text-xs text-center text-[#744253] font-medium"></p>
@@ -248,7 +249,7 @@
                     <span class="block text-xs font-bold text-[#744253] uppercase tracking-wider">SuperNotes
                         Summary</span>
                     <button id="downloadNoteBtn"
-                        class="text-xs font-bold text-white bg-[#744253] hover:bg-black px-3 py-1.5 rounded-lg transition cursor-pointer">Download
+                        class="btn-primary text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Download
                         PDF</button>
                 </div>
                 <div id="formattedSummaryResult"
@@ -360,11 +361,11 @@
 
         <div class="pt-4 flex flex-col gap-2">
             <a href="/profile/edit"
-                class="w-full text-center bg-[#744253] hover:bg-black text-white font-bold py-3 rounded-xl transition text-xs shadow-sm">
+                class="btn-primary w-full text-center font-bold py-3 rounded-xl text-xs shadow-sm">
                 Edit Details
             </a>
             <a href="/logout"
-                class="w-full text-center bg-rose-50 border border-rose-200 text-rose-600 font-bold py-3 rounded-xl hover:bg-rose-100 transition text-xs">
+                class="btn-danger w-full text-center font-bold py-3 rounded-xl text-xs">
                 Logout of Session
             </a>
         </div>
@@ -375,7 +376,7 @@
         <div class="flex items-center justify-between border-b border-[#F3D9DC] pb-3">
             <h3 class="text-xl font-bold text-[#744253]">Edit Details</h3>
             <a href="/profile"
-                class="text-xs font-bold text-[#744253] bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition">Back</a>
+                class="btn-secondary text-xs font-bold px-3 py-1.5 rounded-lg">Back</a>
         </div>
 
         {% with messages = get_flashed_messages() %}
@@ -407,7 +408,7 @@
                     class="w-full text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
             </div>
             <button type="submit"
-                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3 rounded-xl transition text-xs shadow-sm">
+                class="btn-primary w-full font-bold py-3 rounded-xl text-xs shadow-sm">
                 Save Details
             </button>
         </form>
@@ -424,7 +425,7 @@
                     <input type="text" name="otp" placeholder="6-digit code" maxlength="6" required
                         class="flex-1 text-sm font-semibold text-[#744253] bg-white p-2.5 rounded-xl border border-[#B49286] focus:outline-none">
                     <button type="submit"
-                        class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Verify</button>
+                        class="btn-primary font-bold px-4 rounded-xl text-xs">Verify</button>
                 </form>
                 <form action="/profile/email/cancel" method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -437,7 +438,7 @@
                 <input type="email" name="new_email" placeholder="New email address" required
                     class="flex-1 text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
                 <button type="submit"
-                    class="bg-[#744253] hover:bg-black text-white font-bold px-4 rounded-xl text-xs">Change</button>
+                    class="btn-primary font-bold px-4 rounded-xl text-xs">Change</button>
             </form>
             <p class="text-[10px] text-slate-400">Current: {{ current_user.email }}. We'll send a verification code to
                 the new address.</p>
@@ -448,8 +449,14 @@
 </div>
 
 <style>
+    .deck-press-wrapper {
+        /* press feedback lives here, separate from the drag-driven rotation below */
+        transition: transform 100ms ease-out;
+    }
+
     .deck-view-perspective {
         perspective: 1000px;
+        touch-action: pan-y; /* let vertical page scroll pass through; horizontal drag is ours */
     }
 
     .transform-style-3d {
@@ -465,8 +472,13 @@
         transform: rotateY(180deg);
     }
 
-    .card-flipped .deck-inner-wrapper {
-        transform: rotateY(180deg);
+    /* .deck-inner-wrapper's rotateY is now set directly by JS every frame (spring-driven),
+       never by a CSS transition/class, so it can be grabbed and reversed mid-flight. */
+
+    @media (prefers-reduced-motion: reduce) {
+        .backface-hidden-stage {
+            transition: opacity 150ms ease;
+        }
     }
 </style>
 
@@ -532,7 +544,7 @@
                         <button onclick="openSavedDeck(${deck.id}, '${safeTopic}')" class="flex-1 text-left font-bold text-xs truncate cursor-pointer hover:underline" title="${deck.topic}">
                              ${deck.topic} <span class="text-[10px] opacity-70 font-mono">(${deck.count})</span>
                         </button>
-                        <button onclick="deleteFlashcardDeck(${deck.id}, event)" title="Delete Flashcard Deck" class="p-1.5 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-lg transition cursor-pointer flex-shrink-0">
+                        <button onclick="deleteFlashcardDeck(${deck.id}, event)" title="Delete Flashcard Deck" class="btn-danger-ghost p-1.5 rounded-lg cursor-pointer flex-shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
@@ -669,7 +681,7 @@
 
     function renderStageCard() {
         if (!localDeckStore.length) return;
-        document.querySelector('.deck-view-perspective').classList.remove('card-flipped');
+        if (window.fcFlip) window.fcFlip.reset();
         document.getElementById('cardFrontText').innerText = localDeckStore[currentCardCursor].question;
         document.getElementById('cardBackText').innerText = localDeckStore[currentCardCursor].answer;
         document.getElementById('deckCounter').innerText = `${currentCardCursor + 1} / ${localDeckStore.length}`;
@@ -682,6 +694,160 @@
         if (currentCardCursor >= localDeckStore.length) currentCardCursor = 0;
         renderStageCard();
     }
+
+    // --- Flashcard drag-to-flip: 1:1 tracking, interruptible spring, velocity handoff ---
+    // See /mnt/skills/user/apple-design/SKILL.md sections 1-6.
+    (function () {
+        const press = document.getElementById('fcCardPress');
+        const stage = document.getElementById('fcCardStage');
+        const inner = document.getElementById('fcCardInner');
+        const back = stage.querySelector('.face-rotate-y-180');
+        if (!stage || !inner) return;
+
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        // ---------- Reduced-motion path: static cross-fade, no 3D rotation ----------
+        if (reducedMotion) {
+            back.style.transform = 'none'; // faces just stack; no rotateY at all
+            let flipped = false;
+            function paint() {
+                stage.querySelector('.backface-hidden-stage:not(.face-rotate-y-180)').style.opacity = flipped ? '0' : '1';
+                back.style.opacity = flipped ? '1' : '0';
+            }
+            stage.style.cursor = 'pointer';
+            stage.addEventListener('click', () => { flipped = !flipped; paint(); });
+            paint();
+            window.fcFlip = { reset() { flipped = false; paint(); } };
+            return;
+        }
+
+        // ---------- Full spring/drag path ----------
+        const DEG_PER_PX = 0.6;      // drag sensitivity: ~300px = a full 180deg flip
+        const RUBBER_DIM = 220;      // rubber-band resistance range past 0/180
+        const RUBBER_K = 0.55;
+
+        let rotation = 0;            // live (presentation) value, source of truth
+        let velocity = 0;            // deg/s, carried across interrupts
+        let flipped = false;
+        let rafId = null;
+
+        let dragging = false, moved = false, startX = 0, baseRotation = 0;
+        let history = []; // {x, t} samples for release velocity
+
+        function applyRotation(deg) {
+            rotation = deg;
+            inner.style.transform = `rotateY(${deg}deg)`;
+        }
+
+        function rubberband(overshoot, dimension, k) {
+            return (overshoot * dimension * k) / (dimension + k * Math.abs(overshoot));
+        }
+
+        // Apple's exponential-decay momentum projection (decelerationRate ~0.998)
+        function project(v, decelerationRate = 0.998) {
+            return (v / 1000) * decelerationRate / (1 - decelerationRate);
+        }
+
+        function cancelSpring() {
+            if (rafId) cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+
+        // Critically-damped-by-default spring: dampingRatio 1.0 = no overshoot,
+        // ~0.8 = slight bounce (only used when a gesture actually carried momentum).
+        function springTo(target, initialVelocity, dampingRatio, response) {
+            cancelSpring();
+            velocity = initialVelocity;
+            let last = performance.now();
+            function frame(now) {
+                let dt = Math.min((now - last) / 1000, 0.032);
+                last = now;
+                const steps = 2, subDt = dt / steps;
+                const angularFreq = (2 * Math.PI) / response;
+                for (let i = 0; i < steps; i++) {
+                    const accel = -2 * dampingRatio * angularFreq * velocity - angularFreq * angularFreq * (rotation - target);
+                    velocity += accel * subDt;
+                    applyRotation(rotation + velocity * subDt);
+                }
+                if (Math.abs(rotation - target) < 0.4 && Math.abs(velocity) < 8) {
+                    applyRotation(target);
+                    rafId = null;
+                    return;
+                }
+                rafId = requestAnimationFrame(frame);
+            }
+            rafId = requestAnimationFrame(frame);
+        }
+
+        stage.addEventListener('pointerdown', (e) => {
+            stage.setPointerCapture(e.pointerId);
+            cancelSpring(); // grab it mid-flight if it was still settling
+            dragging = true;
+            moved = false;
+            startX = e.clientX;
+            baseRotation = rotation;
+            history = [{ x: e.clientX, t: performance.now() }];
+            press.style.transform = 'scale(0.97)'; // feedback on press, not release
+            stage.style.cursor = 'grabbing';
+        });
+
+        stage.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - startX;
+            if (!moved && Math.abs(dx) > 10) moved = true; // small hysteresis before committing
+            if (!moved) return;
+            e.preventDefault();
+
+            let raw = baseRotation + dx * DEG_PER_PX;
+            let target;
+            if (raw < 0) target = -rubberband(-raw, RUBBER_DIM, RUBBER_K);
+            else if (raw > 180) target = 180 + rubberband(raw - 180, RUBBER_DIM, RUBBER_K);
+            else target = raw;
+
+            applyRotation(target); // 1:1 with the pointer, every frame, no easing
+            history.push({ x: e.clientX, t: performance.now() });
+            if (history.length > 5) history.shift();
+        });
+
+        function endDrag(e) {
+            if (!dragging) return;
+            dragging = false;
+            stage.style.cursor = 'grab';
+            press.style.transform = ''; // eases back via the wrapper's 100ms transition
+
+            if (!moved) {
+                // Plain tap: commit the flip, no gesture momentum -> critically damped
+                const target = flipped ? 0 : 180;
+                flipped = !flipped;
+                springTo(target, 0, 1.0, 0.35);
+                return;
+            }
+
+            const last = history[history.length - 1];
+            const prev = history[Math.max(0, history.length - 3)];
+            const dt = Math.max((last.t - prev.t) / 1000, 0.001);
+            const releaseVelocity = ((last.x - prev.x) / dt) * DEG_PER_PX; // deg/s
+
+            const projected = rotation + project(releaseVelocity);
+            const target = projected > 90 ? 180 : 0;
+            flipped = target === 180;
+            // Momentum carried the gesture, so a little bounce reads right here.
+            springTo(target, releaseVelocity, 0.8, 0.35);
+        }
+
+        stage.addEventListener('pointerup', endDrag);
+        stage.addEventListener('pointercancel', endDrag);
+
+        window.fcFlip = {
+            reset() {
+                cancelSpring();
+                dragging = false;
+                flipped = false;
+                press.style.transform = '';
+                applyRotation(0); // instant, no animation, for a fresh card
+            }
+        };
+    })();
 
     async function buildAIFlashcards() {
         const inputField = document.getElementById('fcTopicField');
@@ -772,7 +938,7 @@
 
     function deleteRowBtnHTML(noteId) {
         return `
-            <button onclick="deleteSupernote(${noteId}, event)" title="Delete SuperNote" class="p-1.5 text-[#744253]/60 hover:text-rose-600 hover:bg-rose-100/60 rounded-lg transition cursor-pointer flex-shrink-0">
+            <button onclick="deleteSupernote(${noteId}, event)" title="Delete SuperNote" class="btn-danger-ghost p-1.5 rounded-lg cursor-pointer flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
@@ -813,7 +979,7 @@
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <button class="text-[10px] font-bold text-[#744253] bg-white border border-[#B49286] px-2.5 py-1.5 rounded-lg hover:bg-[#744253] hover:text-white transition">View</button>
-                <button class="text-[10px] font-bold text-white bg-[#744253] px-2.5 py-1.5 rounded-lg hover:bg-black transition">⬇</button>
+                <button class="btn-primary text-[10px] font-bold px-2.5 py-1.5 rounded-lg">⬇</button>
                 ${deleteRowBtnHTML(note.id)}
             </div>
         `;

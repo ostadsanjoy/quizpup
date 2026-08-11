@@ -16,7 +16,9 @@
         {% with messages = get_flashed_messages() %}
         {% if messages %}
         {% for message in messages %}
-        <div class="text-xs bg-rose-50 border border-rose-200 text-rose-600 p-2.5 rounded-xl font-medium">{{ message }}</div>
+        <div class="text-xs p-2.5 rounded-xl font-medium"
+            style="background-color: var(--color-danger-bg); border: 1px solid var(--color-danger-border); color: var(--color-danger-text);">
+            {{ message }}</div>
         {% endfor %}
         {% endif %}
         {% endwith %}
@@ -51,7 +53,7 @@
                     class="w-full border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
             </div>
             <button type="submit"
-                class="w-full bg-[#744253] hover:bg-black text-white font-bold py-3.5 rounded-xl transition shadow-md text-sm mt-2">
+                class="btn-primary w-full font-bold py-3.5 rounded-xl shadow-md text-sm mt-2">
                 Complete Setup
             </button>
         </form>
