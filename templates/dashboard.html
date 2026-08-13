@@ -2,7 +2,7 @@
 {% block content %}
 
 <div
-    class="bg-[#D7BEA8] px-6 py-3 rounded-b-[2.5rem] flex items-center justify-between shadow-sm border-b border-[#B49286]">
+    class="bg-[#D7BEA8] px-6 py-3 rounded-b-[2.5rem] flex items-center justify-between elevate-sm border-b border-[#B49286]">
     <div class="w-35 h-35 flex items-center justify-center transition duration-300 hover:scale-105">
         <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}"
             class="max-h-full max-w-full object-contain drop-shadow-sm" alt="Mascot">
@@ -17,10 +17,10 @@
 <div class="p-5 space-y-6">
     {% if view == 'home' %}
     <div id="homeFeedSection" class="space-y-6">
-        <div class="bg-[#C78283] p-4 rounded-3xl flex justify-between items-center shadow-sm">
+        <div class="bg-[#C78283] p-4 rounded-3xl flex justify-between items-center elevate-sm">
             <h3 class="text-2xl font-serif font-bold text-white pl-2">Past Quizzes</h3>
             <button onclick="switchToQuizForm()"
-                class="btn-primary text-xs font-semibold px-4 py-2.5 rounded-full shadow-md cursor-pointer">
+                class="btn-primary text-xs font-semibold px-4 py-2.5 rounded-full elevate-md cursor-pointer">
                 Create New Quiz
             </button>
         </div>
@@ -28,7 +28,7 @@
         <div class="space-y-4">
             {% for q in past_quizzes %}
             <div id="quiz-card-{{ q.id }}"
-                class="bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition shadow-sm group">
+                class="bg-[#F3D9DC] border border-[#B49286] p-5 rounded-3xl flex justify-between items-center hover:bg-[#EBC4C8] transition elevate-sm lift-on-hover group">
                 <a href="/quiz/{{ q.id }}" class="flex-1 space-y-1 pr-3">
                     <h4 class="font-bold text-[#744253] text-lg group-hover:underline">{{ q.topic }}</h4>
                     <div class="flex gap-4 text-xs font-medium text-[#744253] opacity-80">
@@ -62,9 +62,9 @@
         </div>
     </div>
 
-    <div id="quizFormSection" class="hidden bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-4">
+    <div id="quizFormSection" class="hidden bg-white border border-[#B49286] rounded-3xl p-6 elevate-sm space-y-4">
         <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">⬅ Back to
+            <button onclick="switchToFeed()" class="text-xs font-bold text-[#744253] hover:underline">Back to
                 Feed</button>
             <span class="text-xs uppercase font-mono tracking-widest text-[#B49286] font-bold">Quiz Setup</span>
         </div>
@@ -107,7 +107,7 @@
                 <div class="grid grid-cols-5 gap-1.5 mb-2">
                     {% for count in [10, 20, 30, 50, 100] %}
                     <button type="button" data-count="{{ count }}" onclick="setQCount(this.dataset.count)"
-                        class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition shadow-sm">{{
+                        class="border border-[#B49286] py-2 rounded-xl text-xs font-bold bg-[#D7BEA8] text-[#744253] hover:bg-[#B49286] hover:text-white transition elevate-sm">{{
                         count }}</button>
                     {% endfor %}
                 </div>
@@ -123,14 +123,14 @@
             </div>
 
             <button type="submit" id="genBtn"
-                class="btn-primary w-full font-bold py-3.5 rounded-xl shadow-md text-sm cursor-pointer">
+                class="btn-primary w-full font-bold py-3.5 rounded-xl elevate-md text-sm cursor-pointer">
                 Start Quiz
             </button>
         </form>
     </div>
 
     {% elif view == 'flashcards' %}
-    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-6">
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 elevate-sm space-y-6">
         <div class="bg-[#C78283] p-4 rounded-2xl text-center">
             <h3 class="text-xl font-bold text-white font-serif">AI Flashcards</h3>
             <p class="text-xs text-white/90 mt-0.5">Test active memory with standard exams or smart prompts</p>
@@ -143,11 +143,11 @@
                     Decks</span>
                 <div class="grid grid-cols-3 gap-2">
                     <button onclick="openExam('JEE')"
-                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm">JEE</button>
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 elevate-sm">JEE</button>
                     <button onclick="openExam('NEET')"
-                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm">NEET</button>
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 elevate-sm">NEET</button>
                     <button onclick="openExam('CAT')"
-                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm">CAT</button>
+                        class="bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 text-xs rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 elevate-sm">CAT</button>
                 </div>
             </div>
 
@@ -158,7 +158,7 @@
                     <input type="text" id="fcTopicField" placeholder="e.g., Organic chemistry structural equations..."
                         class="flex-1 border border-[#B49286] bg-[#FFFBFB] rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#C78283]">
                     <button onclick="buildAIFlashcards()" id="fcGenBtn"
-                        class="btn-primary px-4 rounded-xl text-xs font-bold shadow-sm cursor-pointer flex items-center justify-center">Build</button>
+                        class="btn-primary px-4 rounded-xl text-xs font-bold elevate-sm cursor-pointer flex items-center justify-center">Build</button>
                 </div>
             </div>
 
@@ -214,7 +214,7 @@
     </div>
 
     {% elif view == 'study' %}
-    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 elevate-sm space-y-5">
         <div class="bg-[#744253] p-4 rounded-2xl text-center">
             <h3 class="text-xl font-bold text-white font-serif">AI SuperNotes & OCR</h3>
             <p class="text-xs text-white/90 mt-0.5">Transform photos and pdfs of handwritten/digital notes into sharp
@@ -231,7 +231,7 @@
                 <p id="note-file-name" class="text-xs text-slate-400 mt-1">No images or PDFs parsed yet</p>
             </div>
             <button type="submit" id="studyBtn"
-                class="btn-accent w-full font-bold py-3.5 rounded-xl text-sm shadow-md cursor-pointer">
+                class="btn-accent w-full font-bold py-3.5 rounded-xl text-sm elevate-md cursor-pointer">
                 Process Notes
             </button>
             <p id="studyStatusMsg" class="hidden text-xs text-center text-[#744253] font-medium"></p>
@@ -301,7 +301,7 @@
     </div>
 
     {% elif view == 'account' %}
-    <div class="bg-white border border-[#B49286] rounded-3xl p-8 shadow-sm text-center space-y-4 my-4">
+    <div class="bg-white border border-[#B49286] rounded-3xl p-8 elevate-sm text-center space-y-4 my-4">
         <div class="w-20 h-20 mx-auto bg-[#F3D9DC] rounded-full flex items-center justify-center p-3 animate-bounce">
             <img src="{{ url_for('static', filename='images/premium.png') }}"
                 class="max-h-full max-w-full object-contain" alt="Premium">
@@ -317,7 +317,7 @@
     </div>
 
     {% elif view == 'profile' %}
-    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 elevate-sm space-y-5">
         <div class="flex justify-between items-center border-b border-[#F3D9DC] pb-3">
             <h3 class="text-xl font-bold text-[#744253]">User Profile Dashboard</h3>
             <span
@@ -361,7 +361,7 @@
 
         <div class="pt-4 flex flex-col gap-2">
             <a href="/profile/edit"
-                class="btn-primary w-full text-center font-bold py-3 rounded-xl text-xs shadow-sm">
+                class="btn-primary w-full text-center font-bold py-3 rounded-xl text-xs elevate-sm">
                 Edit Details
             </a>
             <a href="/logout"
@@ -372,7 +372,7 @@
     </div>
 
     {% elif view == 'edit_profile' %}
-    <div class="bg-white border border-[#B49286] rounded-3xl p-6 shadow-sm space-y-5">
+    <div class="bg-white border border-[#B49286] rounded-3xl p-6 elevate-sm space-y-5">
         <div class="flex items-center justify-between border-b border-[#F3D9DC] pb-3">
             <h3 class="text-xl font-bold text-[#744253]">Edit Details</h3>
             <a href="/profile"
@@ -408,7 +408,7 @@
                     class="w-full text-sm font-semibold text-[#744253] bg-[#F3D9DC]/30 p-2.5 rounded-xl border border-transparent focus:border-[#B49286] focus:outline-none">
             </div>
             <button type="submit"
-                class="btn-primary w-full font-bold py-3 rounded-xl text-xs shadow-sm">
+                class="btn-primary w-full font-bold py-3 rounded-xl text-xs elevate-sm">
                 Save Details
             </button>
         </form>
@@ -554,7 +554,7 @@
                 list.innerHTML = '';
                 payload.decks.forEach(deck => {
                     const item = document.createElement('div');
-                    item.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] rounded-xl p-2.5 shadow-sm hover:border-[#744253] active:scale-[0.98] active:border-[#744253] transition duration-100 flex items-center justify-between gap-2";
+                    item.className = "bg-[#F3D9DC] border border-[#B49286] text-[#744253] rounded-xl p-2.5 elevate-sm lift-on-hover hover:border-[#744253] active:scale-[0.98] active:border-[#744253] transition duration-100 flex items-center justify-between gap-2";
                     const safeTopic = (deck.topic || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     item.innerHTML = `
                         <button onclick="openSavedDeck(${deck.id}, '${safeTopic}')" class="flex-1 text-left font-bold text-xs truncate cursor-pointer hover:underline" title="${deck.topic}">
@@ -636,7 +636,7 @@
         Object.keys(fcCurrentSubjects).forEach(subject => {
             const chapterCount = fcCurrentSubjects[subject].length;
             const btn = document.createElement('button');
-            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm flex justify-between items-center";
+            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 elevate-sm flex justify-between items-center";
             btn.innerHTML = `<span>${subject}</span><span class="text-xs font-mono opacity-70">${chapterCount} chapters</span>`;
             btn.onclick = () => openSubject(subject);
             list.appendChild(btn);
@@ -652,7 +652,7 @@
         list.innerHTML = '';
         fcCurrentSubjects[subject].forEach(({ chapter, count }) => {
             const btn = document.createElement('button');
-            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 shadow-sm flex justify-between items-center";
+            btn.className = "text-left bg-[#F3D9DC] border border-[#B49286] text-[#744253] font-bold py-3 px-4 text-sm rounded-xl hover:bg-[#744253] hover:text-white active:scale-[0.97] active:bg-[#744253] active:text-white transition duration-100 elevate-sm flex justify-between items-center";
             btn.innerHTML = `<span>${chapter}</span><span class="text-xs font-mono opacity-70">${count} cards</span>`;
             btn.onclick = () => openChapter(chapter);
             list.appendChild(btn);

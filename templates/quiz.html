@@ -19,7 +19,7 @@
     }
 </style>
 <div id="quiz-workspace" class="p-5 space-y-6">
-    <div class="quiz-toolbar p-4 rounded-2xl shadow-sm space-y-3">
+    <div class="quiz-toolbar p-4 rounded-2xl elevate-sm space-y-3">
         <div class="flex justify-between items-center">
             <div>
                 <h3 class="text-lg font-serif font-bold text-[#744253]">{{ session.topic }}</h3>
@@ -35,7 +35,7 @@
         </div>
     </div>
 
-    <div id="questionCard" class="bg-white border border-[#B49286] p-6 rounded-3xl shadow-sm">
+    <div id="questionCard" class="bg-white border border-[#B49286] p-6 rounded-3xl elevate-sm">
         <div id="question-header" class="text-sm font-bold text-[#C78283] mb-2 uppercase tracking-wide"></div>
         <p id="question-body-text" class="text-base text-[#744253] font-semibold mb-6"></p>
         
@@ -51,13 +51,13 @@
         <button id="prevBtn" onclick="moveSlide(-1)" class="px-4 py-2 bg-[#F3D9DC] text-[#744253] border border-[#B49286] rounded-xl text-sm font-semibold hover:bg-[#EBC4C8] disabled:opacity-50 cursor-pointer">Previous</button>
         <div class="flex gap-2">
             <button id="clearBtn" onclick="clearCurrentChoice()" class="px-4 py-2 border border-[#B49286] text-[#744253] rounded-xl text-sm font-medium hover:bg-[#F3D9DC]/40 cursor-pointer">Clear Answer</button>
-            <button id="hintTriggerBtn" onclick="requestHintPayload()" class="btn-accent px-4 py-2 rounded-xl text-sm font-semibold shadow-sm hidden cursor-pointer">Hint</button>
+            <button id="hintTriggerBtn" onclick="requestHintPayload()" class="btn-accent px-4 py-2 rounded-xl text-sm font-semibold elevate-sm hidden cursor-pointer">Hint</button>
         </div>
-        <button id="nextBtn" onclick="moveSlide(1)" class="btn-primary px-4 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer">Next</button>
+        <button id="nextBtn" onclick="moveSlide(1)" class="btn-primary px-4 py-2 rounded-xl text-sm font-semibold elevate-sm cursor-pointer">Next</button>
     </div>
 </div>
 
-<div id="analytics-report-card" class="hidden space-y-6 bg-white border border-[#B49286] p-6 rounded-3xl shadow-sm m-5">
+<div id="analytics-report-card" class="hidden space-y-6 bg-white border border-[#B49286] p-6 rounded-3xl elevate-lg m-5">
     <h3 class="text-2xl font-serif font-bold text-[#744253] reveal-in">Quiz Summary Report</h3>
     <p class="text-lg font-semibold text-[#744253] reveal-in">Total Score: <span id="score-data-val" class="font-black text-[#C78283] text-2xl font-mono tracking-tight"></span></p>
     
@@ -67,8 +67,8 @@
     </div>
     
     <div class="flex flex-col sm:flex-row gap-3 pt-2 reveal-in reveal-in-delay">
-        <button onclick="revealExplanationsWorkflow()" class="btn-accent flex-1 font-semibold py-3 px-4 rounded-2xl text-sm shadow-sm cursor-pointer text-center">Review Answers & Explanations</button>
-        <a href="/home" class="btn-primary flex-1 font-semibold py-3 px-4 rounded-2xl text-sm shadow-sm cursor-pointer text-center flex items-center justify-center gap-2">Go to Home</a>
+        <button onclick="revealExplanationsWorkflow()" class="btn-accent flex-1 font-semibold py-3 px-4 rounded-2xl text-sm elevate-sm cursor-pointer text-center">Review Answers & Explanations</button>
+        <a href="/home" class="btn-primary flex-1 font-semibold py-3 px-4 rounded-2xl text-sm elevate-sm cursor-pointer text-center flex items-center justify-center gap-2">Go to Home</a>
     </div>
 </div>
 
@@ -174,16 +174,16 @@ function showQuestion() {
             
             if (isCorrectChoice) {
                 classString += "border-emerald-500 bg-emerald-50/60 text-emerald-900";
-                badgeHtml = '<span class="bg-emerald-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">Correct</span>';
+                badgeHtml = '<span class="bg-emerald-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded elevate-sm">Correct</span>';
             } else if (isUserChoice && !isCorrectChoice) {
                 classString += "border-rose-500 bg-rose-50/60 text-rose-900";
-                badgeHtml = '<span class="bg-rose-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">Wrong</span>';
+                badgeHtml = '<span class="bg-rose-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded elevate-sm">Wrong</span>';
             } else {
                 classString += "border-slate-200 opacity-60";
             }
         } else {
             // Live active testing states
-            classString += isUserChoice ? 'border-[#C78283] bg-[#F3D9DC] text-[#744253] font-bold shadow-xs' : 'border-[#B49286]/30 text-[#744253] hover:bg-[#F3D9DC]/30';
+            classString += isUserChoice ? 'border-[#C78283] bg-[#F3D9DC] text-[#744253] font-bold elevate-sm' : 'border-[#B49286]/30 text-[#744253] hover:bg-[#F3D9DC]/30';
         }
         
         row.className = classString;

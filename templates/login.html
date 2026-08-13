@@ -1,7 +1,9 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="p-6 flex flex-col justify-center min-h-[80vh]">
-    <div class="bg-white border border-[#B49286] p-8 rounded-[2.5rem] shadow-sm space-y-6 text-center">
+<div class="p-6 flex flex-col justify-center min-h-[80vh]"
+    style="background: radial-gradient(ellipse 80% 60% at 50% 20%, rgba(199, 130, 131, 0.16), transparent 65%),
+                        radial-gradient(ellipse 70% 50% at 85% 90%, rgba(215, 190, 168, 0.22), transparent 60%);">
+    <div class="bg-white border border-[#B49286] p-8 rounded-[2.5rem] elevate-lg space-y-6 text-center">
 
         <div class="w-28 h-28 mx-auto flex items-center justify-center bg-[#F3D9DC] rounded-full p-2">
             <img src="{{ url_for('static', filename='images/mascot-happy-sitting.png') }}"
@@ -108,7 +110,7 @@
                 <a href="/forgot-password" class="hover:underline active:opacity-70 font-medium" style="color: var(--color-neutral-text);">Forgot Password?</a>
             </div>
             <button type="submit"
-                class="btn-primary w-full font-bold py-3.5 rounded-xl shadow-md text-sm mt-2">
+                class="btn-primary w-full font-bold py-3.5 rounded-xl elevate-md text-sm mt-2">
                 {{ action }} Session
             </button>
         </form>
