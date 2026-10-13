@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import math
 import uuid
@@ -13,7 +14,7 @@ from google.genai import types
 
 from extensions import db, csrf, limiter
 from models import QuizSession, QuizQuestion
-from services.gemini_service import call_gemini, pick_model
+from services.gemini_service import call_gemini, pick_model, MODEL_HEAVY
 from services.security_utils import is_allowed_upload_content
 
 from . import quiz_bp
@@ -75,8 +76,8 @@ def generate_quiz():
     primary_model = pick_model(is_hardest=(difficulty == "god mode"), char_count=len(source_text))
     context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
-    batch_max = 70
-    loops_needed = math.ceil(total_q / batch_max)
+    batch_size = 25
+    max_topup_rounds = 3
 
     quiz_schema = types.Schema(
         type=types.Type.OBJECT,
@@ -109,12 +110,38 @@ def generate_quiz():
         "god mode": "Test at competitive exam / graduate-entrance level. Combine multiple concepts per question, use tricky edge cases, require precise technical knowledge. Distractors must be expertly crafted near-misses that would fool anyone who doesn't know the material cold."
     }
 
-    def generate_batch(batch_index, current_batch_target):
+    def split_targets(n):
+        targets = [batch_size] * (n // batch_size)
+        if n % batch_size:
+            targets.append(n % batch_size)
+        return targets
+
+    def normalize_stem(text):
+        return re.sub(r'\W+', ' ', str(text).lower()).strip()
+
+    def is_valid_question(q):
+        try:
+            if not isinstance(q, dict):
+                return False
+            for key in ('question', 'opt1', 'opt2', 'opt3', 'opt4', 'hint', 'explanation'):
+                if not str(q.get(key, '')).strip():
+                    return False
+            return int(q.get('correct')) in (1, 2, 3, 4)
+        except (TypeError, ValueError):
+            return False
+
+    def generate_batch(batch_index, batches_total, count, avoid_stems):
+        avoid_block = ""
+        if avoid_stems:
+            listed = "\n".join(f"- {stem[:120]}" for stem in avoid_stems[-150:])
+            avoid_block = f"\nThese questions already exist. Do NOT repeat or rephrase any of them:\n{listed}\n"
+
         prompt = f"""You are an expert exam question writer creating a multiple-choice quiz.
 {context_source}
 
-Generate exactly {current_batch_target} unique questions. Batch {batch_index+1} of {loops_needed}.
-
+Generate exactly {count} unique questions. Batch {batch_index+1} of {batches_total}.
+Other batches are written in parallel, so concentrate on the {batch_index+1}/{batches_total} slice of this subject's subtopics to avoid overlap.
+{avoid_block}
 Difficulty: {difficulty}
 {difficulty_guide.get(difficulty, difficulty_guide['medium'])}
 
@@ -127,47 +154,78 @@ Question design rules:
 6. "hint": A short nudge that points TOWARD the right reasoning without revealing the answer (e.g. "Think about what happens when pressure increases" not "The answer is Boyle's Law").
 7. "explanation": After the student answers, explain WHY the correct answer is right AND why the most tempting wrong answer is wrong. Max 2 sentences.
 """
+        config_kwargs = {
+            "response_mime_type": "application/json",
+            "response_schema": quiz_schema,
+            "temperature": 0.4 if difficulty != "god mode" else 0.8,
+            "max_output_tokens": 16384,
+        }
+        if primary_model == MODEL_HEAVY:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=1024)
+
         response = call_gemini(
             model=primary_model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=quiz_schema,
-                temperature=0.4 if difficulty != "god mode" else 0.8
-            )
+            config=types.GenerateContentConfig(**config_kwargs)
         )
         batch_data = json.loads(response.text)
         return batch_data.get('questions', [])
 
-    try:
-        batch_targets = []
-        remaining = total_q
-        for i in range(loops_needed):
-            current_batch_target = batch_max if i < loops_needed - 1 else remaining
-            batch_targets.append(current_batch_target)
-            remaining -= current_batch_target
-
-        results_by_index = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(loops_needed, 5)) as executor:
+    def run_batches(targets, avoid_stems):
+        results = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(targets), 5)) as executor:
             future_to_index = {
-                executor.submit(generate_batch, i, batch_targets[i]): i
-                for i in range(loops_needed)
+                executor.submit(generate_batch, i, len(targets), targets[i], avoid_stems): i
+                for i in range(len(targets))
             }
             for future in concurrent.futures.as_completed(future_to_index):
                 idx = future_to_index[future]
-                results_by_index[idx] = future.result()
+                try:
+                    results[idx] = future.result()
+                except Exception:
+                    logger.exception("Quiz batch %s failed for user %s", idx, current_user.id)
+                    results[idx] = []
+        ordered = []
+        for i in range(len(targets)):
+            ordered.extend(results.get(i, []))
+        return ordered
 
-        all_generated_questions = []
-        for i in range(loops_needed):
-            all_generated_questions.extend(results_by_index[i])
+    try:
+        collected = []
+        seen_stems = set()
 
-        all_generated_questions = all_generated_questions[:total_q]
+        def absorb(batch_questions):
+            for q in batch_questions:
+                if not is_valid_question(q):
+                    continue
+                key = normalize_stem(q['question'])
+                if key in seen_stems:
+                    continue
+                seen_stems.add(key)
+                collected.append(q)
+
+        absorb(run_batches(split_targets(total_q), []))
+
+        for _ in range(max_topup_rounds):
+            shortfall = total_q - len(collected)
+            if shortfall <= 0:
+                break
+            ask = shortfall + max(3, math.ceil(shortfall * 0.2))
+            absorb(run_batches(split_targets(ask), [q['question'] for q in collected]))
+
+        if not collected:
+            raise RuntimeError("No valid questions were generated")
+
+        if len(collected) < total_q:
+            logger.warning("Quiz short after top-ups: wanted %s, got %s", total_q, len(collected))
+
+        all_generated_questions = collected[:total_q]
 
         quiz_session_instance = QuizSession(
             user_id=current_user.id,
             topic=topic if topic else "Uploaded Document Reference Workspace",
             difficulty=difficulty,
-            total_questions=total_q,
+            total_questions=len(all_generated_questions),
             duration_minutes=duration,
             seconds_remaining=duration * 60,
             hints_remaining=hints_allowed
