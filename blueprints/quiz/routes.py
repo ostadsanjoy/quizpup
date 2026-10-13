@@ -76,10 +76,6 @@ def generate_quiz():
     task = quiz_task(difficulty, len(source_text))
     context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
-    # Larger batches = fewer parallel calls needed (200Q → 4 batches of 50).
-    # We request exactly total_q upfront; after dedup/validation we top-up
-    # only the real shortfall + a small 10% buffer (min 2) so API usage stays
-    # minimal — critical on free-tier RPM/RPD limits.
     batch_max = 60
     max_topup_rounds = 2
 
@@ -133,7 +129,7 @@ def generate_quiz():
         except (TypeError, ValueError):
             return False
 
-    def generate_batch(batch_index, batches_total, count, avoid_stems):
+    def generate_batch(batch_index, batches_total, count, avoid_stems, call_task):
         avoid_block = ""
         if avoid_stems:
             listed = "\n".join(f"- {stem[:120]}" for stem in avoid_stems[-150:])
@@ -158,7 +154,7 @@ Question design rules:
 7. "explanation": After the student answers, explain WHY the correct answer is right AND why the most tempting wrong answer is wrong. Max 2 sentences.
 """
         response = call_gemini(
-            task,
+            call_task,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -171,11 +167,11 @@ Question design rules:
 
     cooldowns = []
 
-    def run_batches(targets, avoid_stems):
+    def run_batches(targets, avoid_stems, call_task):
         results = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(targets), MAX_PARALLEL)) as executor:
             future_to_index = {
-                executor.submit(generate_batch, i, len(targets), targets[i], avoid_stems): i
+                executor.submit(generate_batch, i, len(targets), targets[i], avoid_stems, call_task): i
                 for i in range(len(targets))
             }
             for future in concurrent.futures.as_completed(future_to_index):
@@ -207,7 +203,10 @@ Question design rules:
                 seen_stems.add(key)
                 collected.append(q)
 
-        absorb(run_batches(split_targets(total_q), []))
+        first_pass_total = total_q + max(2, math.ceil(total_q * 0.1))
+        topup_task = quiz_task("hard") if task == "quiz_god" else task
+
+        absorb(run_batches(split_targets(first_pass_total), [], task))
 
         for _ in range(max_topup_rounds):
             shortfall = total_q - len(collected)
@@ -218,7 +217,7 @@ Question design rules:
             # Request exactly the shortfall + a tight 10% safety buffer (min 2)
             # so we don't waste RPM/RPD on questions we'll immediately discard.
             ask = shortfall + max(2, math.ceil(shortfall * 0.1))
-            absorb(run_batches(split_targets(ask), [q['question'] for q in collected]))
+            absorb(run_batches(split_targets(ask), [q['question'] for q in collected], topup_task))
 
         if len(collected) < total_q and cooldowns:
             raise max(cooldowns, key=lambda cd: cd.retry_after)
