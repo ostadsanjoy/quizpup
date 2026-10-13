@@ -14,7 +14,7 @@ from google.genai import types
 
 from extensions import db, csrf, limiter
 from models import QuizSession, QuizQuestion
-from services.gemini_service import call_gemini, pick_model, MODEL_HEAVY
+from services.gemini_service import call_gemini, quiz_task, GeminiCooldown, MAX_PARALLEL
 from services.security_utils import is_allowed_upload_content
 
 from . import quiz_bp
@@ -73,10 +73,10 @@ def generate_quiz():
     else:
         hints_allowed = 0
 
-    primary_model = pick_model(is_hardest=(difficulty == "god mode"), char_count=len(source_text))
+    task = quiz_task(difficulty, len(source_text))
     context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
-    batch_size = 25
+    batch_max = 35
     max_topup_rounds = 3
 
     quiz_schema = types.Schema(
@@ -111,10 +111,9 @@ def generate_quiz():
     }
 
     def split_targets(n):
-        targets = [batch_size] * (n // batch_size)
-        if n % batch_size:
-            targets.append(n % batch_size)
-        return targets
+        n_batches = math.ceil(n / batch_max)
+        base, extra = divmod(n, n_batches)
+        return [base + (1 if i < extra else 0) for i in range(n_batches)]
 
     def normalize_stem(text):
         return re.sub(r'\W+', ' ', str(text).lower()).strip()
@@ -154,26 +153,23 @@ Question design rules:
 6. "hint": A short nudge that points TOWARD the right reasoning without revealing the answer (e.g. "Think about what happens when pressure increases" not "The answer is Boyle's Law").
 7. "explanation": After the student answers, explain WHY the correct answer is right AND why the most tempting wrong answer is wrong. Max 2 sentences.
 """
-        config_kwargs = {
-            "response_mime_type": "application/json",
-            "response_schema": quiz_schema,
-            "temperature": 0.4 if difficulty != "god mode" else 0.8,
-            "max_output_tokens": 16384,
-        }
-        if primary_model == MODEL_HEAVY:
-            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=1024)
-
         response = call_gemini(
-            model=primary_model,
+            task,
             contents=prompt,
-            config=types.GenerateContentConfig(**config_kwargs)
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=quiz_schema,
+                max_output_tokens=32768
+            )
         )
         batch_data = json.loads(response.text)
         return batch_data.get('questions', [])
 
+    cooldowns = []
+
     def run_batches(targets, avoid_stems):
         results = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(targets), 5)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(targets), MAX_PARALLEL)) as executor:
             future_to_index = {
                 executor.submit(generate_batch, i, len(targets), targets[i], avoid_stems): i
                 for i in range(len(targets))
@@ -182,6 +178,9 @@ Question design rules:
                 idx = future_to_index[future]
                 try:
                     results[idx] = future.result()
+                except GeminiCooldown as cd:
+                    cooldowns.append(cd)
+                    results[idx] = []
                 except Exception:
                     logger.exception("Quiz batch %s failed for user %s", idx, current_user.id)
                     results[idx] = []
@@ -210,8 +209,13 @@ Question design rules:
             shortfall = total_q - len(collected)
             if shortfall <= 0:
                 break
+            if cooldowns:
+                raise max(cooldowns, key=lambda cd: cd.retry_after)
             ask = shortfall + max(3, math.ceil(shortfall * 0.2))
             absorb(run_batches(split_targets(ask), [q['question'] for q in collected]))
+
+        if len(collected) < total_q and cooldowns:
+            raise max(cooldowns, key=lambda cd: cd.retry_after)
 
         if not collected:
             raise RuntimeError("No valid questions were generated")
@@ -249,6 +253,11 @@ Question design rules:
         db.session.commit()
 
         return jsonify({"success": True, "session_id": quiz_session_instance.id})
+    except GeminiCooldown as cd:
+        response = jsonify({"error": cd.message, "retry_after": cd.retry_after})
+        response.status_code = 429
+        response.headers["Retry-After"] = str(cd.retry_after)
+        return response
     except Exception:
         logger.exception("Quiz generation failed for user %s", current_user.id)
         return jsonify({"error": "Could not generate the quiz right now. Please try again shortly."}), 500

@@ -8,7 +8,7 @@ from google.genai import types
 from extensions import db, csrf, limiter
 from models import FlashcardDeck
 from flashcard_data import PRELOADED_DECKS
-from services.gemini_service import call_gemini, pick_model
+from services.gemini_service import call_gemini, GeminiCooldown
 
 from . import flashcards_bp
 
@@ -92,12 +92,12 @@ Card design rules:
 """
     try:
         response = call_gemini(
-            model=pick_model(),
+            "flashcards",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=fc_schema,
-                temperature=0.5
+                max_output_tokens=16384
             )
         )
         res_data = json.loads(response.text)
@@ -112,6 +112,11 @@ Card design rules:
         db.session.commit()
 
         return jsonify({"success": True, "deck": cards, "deck_id": saved_deck.id})
+    except GeminiCooldown as cd:
+        response = jsonify({"success": False, "error": cd.message, "retry_after": cd.retry_after})
+        response.status_code = 429
+        response.headers["Retry-After"] = str(cd.retry_after)
+        return response
     except Exception:
         logger.exception("AI flashcard generation failed for user %s", current_user.id)
         return jsonify({"success": False, "error": "Could not generate flashcards right now. Please try again shortly."}), 500

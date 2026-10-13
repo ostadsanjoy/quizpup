@@ -11,3 +11,5 @@ requests
 fpdf2
 flask-wtf
 Flask-Limiter
+tzdata
+psycopg[binary]

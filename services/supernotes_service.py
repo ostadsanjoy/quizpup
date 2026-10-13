@@ -10,7 +10,7 @@ from google.genai import types
 
 from extensions import db
 from models import SuperNote
-from services.gemini_service import call_gemini, pick_model, GEMINI_RPM_TARGET
+from services.gemini_service import call_gemini, GeminiCooldown, BACKGROUND_MAX_WAIT, MAX_PARALLEL
 from services.pdf_service import render_summary_html, generate_pdf_bytes
 
 logger = logging.getLogger("quizpup")
@@ -68,16 +68,17 @@ def summarize_segment(label, content, retry_tokens=None):
     3. Include only the highest-yield concepts, definitions, formulas, and facts.
        Do not restate the source verbatim, include examples/filler, or repeat points.
     """
-    token_budget = retry_tokens or max(2000, target_words * 6)
+    token_budget = retry_tokens or max(8000, target_words * 8)
 
     response = call_gemini(
-        model=pick_model(),
+        "summary",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=SUMMARY_SCHEMA,
             max_output_tokens=token_budget
-        )
+        ),
+        max_wait=BACKGROUND_MAX_WAIT
     )
 
     finish_reason = None
@@ -107,16 +108,17 @@ def batch_ocr_pdf(filepath, page_count, batch_size=15):
     def ocr_one_batch(idx, start, end):
         ocr_prompt = f"Perform accurate OCR transcription on these scanned handwritten note pages (pages {start+1}-{end})."
         response = call_gemini(
-            model=pick_model(),
+            "ocr",
             contents=[
                 types.Part.from_bytes(data=batch_byte_chunks[idx], mime_type="application/pdf"),
                 ocr_prompt
-            ]
+            ],
+            max_wait=BACKGROUND_MAX_WAIT
         )
         return response.text
 
     results_by_index = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(batch_ranges), GEMINI_RPM_TARGET)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(batch_ranges), MAX_PARALLEL)) as executor:
         future_to_index = {
             executor.submit(ocr_one_batch, idx, start, end): idx
             for idx, (start, end) in enumerate(batch_ranges)
@@ -151,11 +153,12 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
 
                 ocr_prompt = "Perform full digital text transcription from this photographic note document."
                 response = call_gemini(
-                    model=pick_model(),
+                    "ocr",
                     contents=[
                         types.Part.from_bytes(data=img_bytes, mime_type=file_mime_type or "image/jpeg"),
                         ocr_prompt
-                    ]
+                    ],
+                    max_wait=BACKGROUND_MAX_WAIT
                 )
                 extracted_text = response.text
 
@@ -164,7 +167,7 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
 
             segments = split_into_segments(extracted_text)
             summary_results = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(segments), GEMINI_RPM_TARGET)) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(segments), MAX_PARALLEL)) as executor:
                 future_to_index = {
                     executor.submit(summarize_segment, label, content): idx
                     for idx, (label, content) in enumerate(segments)
@@ -181,6 +184,13 @@ def run_supernotes_job(app_instance, note_id, filepath, filename, is_pdf, file_m
             note.summary_html = full_summary
             note.pdf_data = pdf_bytes
             note.status = "complete"
+            db.session.commit()
+        except GeminiCooldown as cd:
+            logger.warning("SuperNotes job %s hit AI cooldown: %s", note_id, cd.message)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            note.status = "failed"
+            note.error_message = cd.message
             db.session.commit()
         except Exception:
             logger.exception("SuperNotes job failed for note %s", note_id)
