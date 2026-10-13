@@ -76,8 +76,12 @@ def generate_quiz():
     task = quiz_task(difficulty, len(source_text))
     context_source = f"Text Source Material Context: {source_text[:40000]}" if source_text else f"Topic: {topic}"
 
-    batch_max = 35
-    max_topup_rounds = 3
+    # Larger batches = fewer parallel calls needed (200Q → 4 batches of 50).
+    # We request exactly total_q upfront; after dedup/validation we top-up
+    # only the real shortfall + a small 10% buffer (min 2) so API usage stays
+    # minimal — critical on free-tier RPM/RPD limits.
+    batch_max = 60
+    max_topup_rounds = 2
 
     quiz_schema = types.Schema(
         type=types.Type.OBJECT,
@@ -211,7 +215,9 @@ Question design rules:
                 break
             if cooldowns:
                 raise max(cooldowns, key=lambda cd: cd.retry_after)
-            ask = shortfall + max(3, math.ceil(shortfall * 0.2))
+            # Request exactly the shortfall + a tight 10% safety buffer (min 2)
+            # so we don't waste RPM/RPD on questions we'll immediately discard.
+            ask = shortfall + max(2, math.ceil(shortfall * 0.1))
             absorb(run_batches(split_targets(ask), [q['question'] for q in collected]))
 
         if len(collected) < total_q and cooldowns:
